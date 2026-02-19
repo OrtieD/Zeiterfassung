@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+
+  <!-- PWA / iPhone Homescreen -->
+  <title>Zeiterfassung</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Zeiterfassung" />
+  <meta name="theme-color" content="#0A0A1A" />
+
+  <!-- App Icon (inline SVG als Data-URL) -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230A0A1A'/%3E%3Ccircle cx='90' cy='90' r='55' fill='none' stroke='%233B7FE8' stroke-width='8'/%3E%3Cline x1='90' y1='90' x2='90' y2='48' stroke='%23fff' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='90' y1='90' x2='118' y2='100' stroke='%233B7FE8' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='90' cy='90' r='5' fill='%23fff'/%3E%3C/svg%3E" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --safe-top: env(safe-area-inset-top, 44px);
+      --safe-bottom: env(safe-area-inset-bottom, 20px);
+      --blue: #3B7FE8;
+      --purple: #6C63FF;
+      --green: #1E8449;
+      --red: #C0392B;
+      --teal: #0AC2A3;
+      --glass: rgba(28, 28, 42, 0.72);
+      --border: rgba(255,255,255,0.10);
+      --text: #fff;
+      --text-dim: rgba(255,255,255,0.45);
+      --text-faint: rgba(255,255,255,0.25);
+      --radius: 20px;
+      --font: 'Nunito', -apple-system, sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; width: 100%; overflow: hidden;
+      background: #0A0A1A; color: var(--text);
+      font-family: var(--font); -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none; -webkit-user-select: none;
+    }
+
+    /* ── Hintergrund ── */
+    #bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+    .blob {
+      position: absolute; border-radius: 50%; opacity: 0.16;
+      animation: blob 12s ease-in-out infinite;
+    }
+    .blob1 { width:400px; height:400px; top:-80px; left:-80px;
+              background: radial-gradient(circle, #3B7FE8 0%, transparent 70%); }
+    .blob2 { width:350px; height:350px; bottom:-60px; right:-60px;
+              background: radial-gradient(circle, #6C63FF 0%, transparent 70%);
+              animation-delay: 3s; }
+    .blob3 { width:250px; height:250px; top:40%; right:15%;
+              background: radial-gradient(circle, #0AC2A3 0%, transparent 70%);
+              animation-delay: 6s; }
+
+    /* ── App Shell ── */
+    #app {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column;
+      padding-top: var(--safe-top);
+    }
+
+    /* ── Status Bar ── */
+    #status-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 24px 8px; font-size: 13px; font-weight: 600;
+    }
+
+    /* ── Header ── */
+    #header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 4px 20px 12px;
+    }
+    #header-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 2px; }
+    #header-title { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+    #avatar-btn {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+      border: 1px solid var(--border); display: flex;
+      align-items: center; justify-content: center; font-size: 17px;
+    }
+
+    /* ── Scroll Area ── */
+    #scroll {
+      flex: 1; overflow-y: auto; padding: 0 14px;
+      -webkit-overflow-scrolling: touch;
+    }
+    #scroll::-webkit-scrollbar { display: none; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--glass); backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 18px; margin-bottom: 12px; position: relative; overflow: hidden;
+    }
+    .card.active-card { border-color: rgba(59,127,232,0.45); box-shadow: 0 0 30px rgba(59,127,232,0.18); }
+
+    /* ── Timer ── */
+    .pulse-dot {
+      position: absolute; top: 16px; right: 16px;
+      width: 10px; height: 10px; border-radius: 50%; background: #4CAF50;
+      animation: pulseDot 2s ease-in-out infinite;
+    }
+    .timer-label { font-size: 11px; color: var(--text-dim); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .timer-big { font-size: 60px; font-weight: 800; letter-spacing: -3px; line-height: 1; margin-bottom: 6px; }
+    .timer-sub  { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; }
+
+    /* ── Chips ── */
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .chip {
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 600;
+      color: rgba(255,255,255,0.8); cursor: pointer; font-family: var(--font);
+      display: flex; align-items: center; gap: 5px; transition: all .15s;
+    }
+    .chip:active { transform: scale(0.95); }
+
+    /* ── Picker ── */
+    .picker { margin-bottom: 14px; }
+    .picker-title { font-size: 10px; color: var(--text-faint); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .picker-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .picker-opt {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 12px; padding: 7px 13px; font-size: 12px; font-weight: 600;
+      color: rgba(255,255,255,0.65); cursor: pointer; font-family: var(--font);
+      transition: all .15s;
+    }
+    .picker-opt:active { transform: scale(0.93); }
+    .picker-opt.active {
+      background: rgba(59,127,232,0.25); border-color: rgba(59,127,232,0.55);
+      color: #3B7FE8;
+    }
+
+    /* ── Note Input ── */
+    .note-input {
+      width: 100%; background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.10); border-radius: 12px;
+      padding: 10px 14px; font-size: 13px; font-family: var(--font);
+      color: rgba(255,255,255,0.8); margin-bottom: 16px; outline: none;
+    }
+    .note-input::placeholder { color: rgba(255,255,255,0.25); }
+
+    /* ── Buttons ── */
+    .btn-main {
+      width: 100%; padding: 16px; border-radius: 16px; font-size: 16px;
+      font-weight: 800; letter-spacing: 0.3px; font-family: var(--font);
+      border: none; cursor: pointer; transition: transform .12s, box-shadow .12s;
+    }
+    .btn-main:active { transform: scale(0.97); }
+    .btn-start {
+      background: linear-gradient(135deg, #3B7FE8, #6C63FF);
+      color: #fff; box-shadow: 0 6px 24px rgba(59,127,232,0.4);
+    }
+    .btn-stop {
+      background: linear-gradient(135deg, #E85353, #C0392B);
+      color: #fff; box-shadow: 0 6px 24px rgba(232,83,83,0.4);
+    }
+    .btn-sec {
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600;
+      color: rgba(255,255,255,0.7); cursor: pointer; font-family: var(--font);
+      transition: transform .12s;
+    }
+    .btn-sec:active { transform: scale(0.96); }
+    .btn-blue { background: rgba(59,127,232,0.22); border-color: rgba(59,127,232,0.4); color: var(--blue); }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+
+    /* ── Manuelle Eingabe ── */
+    .man-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+    .man-field { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+    .man-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; }
+    .time-input {
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 10px; padding: 10px; font-size: 22px; font-weight: 700;
+      color: #fff; width: 100%; font-family: var(--font); outline: none;
+      color-scheme: dark;
+    }
+    .man-arrow { font-size: 18px; color: #555; align-self: flex-end; padding-bottom: 12px; }
+
+    /* ── Section Title ── */
+    .sec-title {
+      font-size: 12px; font-weight: 700; color: var(--text-dim);
+      margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    /* ── Summary Grid ── */
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .summary-item {
+      background: rgba(255,255,255,0.04); border-radius: 12px;
+      padding: 10px 6px; text-align: center;
+    }
+    .summary-key { font-size: 10px; color: var(--text-faint); margin-bottom: 3px; }
+    .summary-val { font-size: 14px; font-weight: 700; color: #fff; }
+    .note-display {
+      margin-top: 10px; padding: 10px 12px;
+      background: rgba(255,255,255,0.04); border-radius: 10px;
+      font-size: 12px; color: var(--text-dim);
+    }
+
+    /* ── History ── */
+    .hist-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .hist-row:last-child { border-bottom: none; }
+    .hist-date { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 3px; }
+    .hist-meta { font-size: 11px; color: var(--text-dim); }
+    .hist-note { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+    .hist-dur  { font-size: 17px; font-weight: 800; color: var(--blue); }
+    .hist-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+    .del-btn {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: rgba(232,83,83,0.18); border: none;
+      color: #E85353; font-size: 11px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .empty-state { text-align: center; color: var(--text-faint); font-size: 14px; padding: 28px 0; }
+
+    /* ── KPI Grid ── */
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .kpi-card {
+      background: var(--glass); backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 14px 10px; text-align: center;
+    }
+    .kpi-icon  { font-size: 20px; margin-bottom: 7px; }
+    .kpi-val   { font-size: 17px; font-weight: 800; color: #fff; margin-bottom: 2px; }
+    .kpi-label { font-size: 9px; color: var(--text-faint); margin-bottom: 1px; }
+    .kpi-sub   { font-size: 9px; color: rgba(255,255,255,0.2); }
+
+    /* ── Bar Chart ── */
+    .bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 120px; padding: 8px 0 4px; }
+    .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .bar-track {
+      width: 100%; flex: 1; background: rgba(255,255,255,0.06);
+      border-radius: 6px; overflow: hidden;
+      display: flex; flex-direction: column; justify-content: flex-end;
+    }
+    .bar-fill {
+      width: 100%; border-radius: 6px;
+      background: linear-gradient(to top, #3B7FE8, #6C63FF);
+      transition: height 0.6s cubic-bezier(.4,0,.2,1);
+    }
+    .bar-day { font-size: 10px; color: var(--text-faint); }
+    .bar-val { font-size: 8px; color: rgba(59,127,232,0.7); }
+
+    /* ── Project Bars ── */
+    .proj-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .proj-name { font-size: 12px; color: var(--text-dim); width: 82px; flex-shrink: 0; }
+    .proj-bar { flex: 1; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
+    .proj-fill { height: 100%; background: linear-gradient(to right, #3B7FE8, #6C63FF); border-radius: 4px; transition: width .6s cubic-bezier(.4,0,.2,1); }
+    .proj-pct { font-size: 12px; color: var(--blue); font-weight: 700; width: 34px; text-align: right; }
+
+    /* ── Tab Bar ── */
+    #tab-bar {
+      display: flex; justify-content: space-around;
+      background: rgba(14,14,24,0.88); backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding: 10px 0; padding-bottom: calc(10px + var(--safe-bottom));
+    }
+    .tab-btn {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; gap: 3px; cursor: pointer;
+      border: none; background: none; color: #8E8E9A;
+      font-family: var(--font); padding: 4px 0; transition: all .15s;
+    }
+    .tab-btn:active { transform: scale(0.9); }
+    .tab-icon { font-size: 22px; line-height: 1; }
+    .tab-label { font-size: 10px; font-weight: 600; }
+    .tab-btn.active .tab-label { color: var(--blue); }
+    .tab-btn.active .tab-icon { filter: drop-shadow(0 0 6px rgba(59,127,232,0.6)); }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%);
+      padding: 12px 24px; border-radius: 22px; font-size: 14px; font-weight: 700;
+      z-index: 200; display: none; white-space: nowrap;
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3); font-family: var(--font);
+      animation: toastIn 0.3s ease;
+    }
+    #toast.show { display: block; }
+    #toast.ok  { background: rgba(76,175,80,0.92); color: #fff; }
+    #toast.err { background: rgba(232,83,83,0.92); color: #fff; }
+
+    /* ── Animationen ── */
+    @keyframes blob {
+      0%,100% { transform: translate(0,0) scale(1); }
+      33% { transform: translate(18px,-14px) scale(1.05); }
+      66% { transform: translate(-10px,10px) scale(0.97); }
+    }
+    @keyframes pulseDot {
+      0%,100% { opacity:1; transform:scale(1); }
+      50% { opacity:0.4; transform:scale(1.5); }
+    }
+    @keyframes toastIn {
+      from { opacity:0; transform:translateX(-50%) translateY(16px); }
+      to   { opacity:1; transform:translateX(-50%) translateY(0); }
+    }
+
+    /* ── Views ── */
+    .view { display: none; }
+    .view.active { display: block; }
+    .spacer { height: 90px; }
+  </style>
+</head>
+<body>
+
+<!-- Hintergrund -->
+<div id="bg">
+  <div class="blob blob1"></div>
+  <div class="blob blob2"></div>
+  <div class="blob blob3"></div>
+</div>
+
+<!-- App -->
+<div id="app">
+
+  <!-- Status Bar -->
+  <div id="status-bar">
+    <span id="clock">--:--</span>
+    <div style="display:flex;gap:6px;font-size:11px;">
+      <span>●●●●</span><span>WiFi</span><span>🔋</span>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div id="header">
+    <div>
+      <div id="header-sub">Datum wird geladen…</div>
+      <div id="header-title">Zeiterfassung</div>
+    </div>
+    <div class="avatar-btn">👤</div>
+  </div>
+
+  <!-- Scroll -->
+  <div id="scroll">
+
+    <!-- ═══ VIEW: HEUTE ═══ -->
+    <div class="view active" id="view-today">
+
+      <!-- Timer-Card -->
+      <div class="card" id="timer-card">
+        <div class="pulse-dot" id="pulse-dot" style="display:none"></div>
+        <div class="timer-label" id="timer-label">Bereit</div>
+        <div class="timer-big" id="timer-big">0:00</div>
+        <div class="timer-sub" id="timer-sub">Noch nicht gestempelt</div>
+
+        <!-- Chips (nur vor Start) -->
+        <div class="chips" id="chips-row">
+          <button class="chip" onclick="togglePicker('pause')">☕ <span id="chip-pause">30 Min</span></button>
+          <button class="chip" onclick="togglePicker('project')">📁 <span id="chip-project">Büro</span></button>
+        </div>
+
+        <!-- Pause Picker -->
+        <div class="picker" id="picker-pause" style="display:none">
+          <div class="picker-title">Pause wählen</div>
+          <div class="picker-row" id="pause-opts"></div>
+        </div>
+
+        <!-- Projekt Picker -->
+        <div class="picker" id="picker-project" style="display:none">
+          <div class="picker-title">Projekt wählen</div>
+          <div class="picker-row" id="project-opts"></div>
+        </div>
+
+        <!-- Notiz -->
+        <input class="note-input" id="note-input" placeholder="Notiz (optional)…" />
+
+        <!-- Haupt-Button -->
+        <button class="btn-main btn-start" id="main-btn" onclick="handleMainBtn()">▶  Starten</button>
+      </div>
+
+      <!-- Manuelle Eingabe -->
+      <div class="card" id="manual-card">
+        <div class="sec-title">✏️ Manuell erfassen</div>
+        <div id="manual-collapsed">
+          <button class="btn-sec" style="width:100%" onclick="openManual()">+ Zeit manuell eintragen</button>
+        </div>
+        <div id="manual-expanded" style="display:none">
+          <div class="man-row">
+            <div class="man-field">
+              <div class="man-label">Start</div>
+              <input type="time" class="time-input" id="man-start" />
+            </div>
+            <div class="man-arrow">→</div>
+            <div class="man-field">
+              <div class="man-label">Ende</div>
+              <input type="time" class="time-input" id="man-end" />
+            </div>
+          </div>
+          <div class="chips">
+            <button class="chip" onclick="togglePicker('man-pause')">☕ <span id="man-chip-pause">30 Min</span></button>
+            <button class="chip" onclick="togglePicker('man-project')">📁 <span id="man-chip-project">Büro</span></button>
+          </div>
+          <div class="picker" id="picker-man-pause" style="display:none">
+            <div class="picker-title">Pause wählen</div>
+            <div class="picker-row" id="man-pause-opts"></div>
+          </div>
+          <div class="picker" id="picker-man-project" style="display:none">
+            <div class="picker-title">Projekt wählen</div>
+            <div class="picker-row" id="man-project-opts"></div>
+          </div>
+          <input class="note-input" id="man-note" placeholder="Notiz…" />
+          <div class="btn-row">
+            <button class="btn-sec" onclick="closeManual()">Abbrechen</button>
+            <button class="btn-sec btn-blue" style="flex:2" onclick="saveManual()">💾 Speichern</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zusammenfassung -->
+      <div class="card" id="summary-card" style="display:none">
+        <div class="sec-title">📋 Heute im Überblick</div>
+        <div class="summary-grid" id="summary-grid"></div>
+        <div id="summary-note"></div>
+      </div>
+
+      <div class="spacer"></div>
+    </div>
+
+    <!-- ═══ VIEW: VERLAUF ═══ -->
+    <div class="view" id="view-history">
+      <div class="card">
+        <div class="sec-title">🗓 Alle Einträge</div>
+        <div id="history-list"></div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+
+    <!-- ═══ VIEW: STATISTIK ═══ -->
+    <div class="view" id="view-stats">
+      <div class="kpi-grid" id="kpi-grid"></div>
+      <div class="card">
+        <div class="sec-title">📊 Letzte 7 Tage</div>
+        <div class="bar-chart" id="bar-chart"></div>
+      </div>
+      <div class="card">
+        <div class="sec-title">📁 Nach Projekt</div>
+        <div id="proj-breakdown"></div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+
+  </div><!-- /scroll -->
+
+  <!-- Tab Bar -->
+  <div id="tab-bar">
+    <button class="tab-btn active" onclick="setTab('today')" id="tab-today">
+      <span class="tab-icon">⏱</span>
+      <span class="tab-label">Heute</span>
+    </button>
+    <button class="tab-btn" onclick="setTab('history')" id="tab-history">
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">Verlauf</span>
+    </button>
+    <button class="tab-btn" onclick="setTab('stats')" id="tab-stats">
+      <span class="tab-icon">📊</span>
+      <span class="tab-label">Statistik</span>
+    </button>
+  </div>
+
+</div><!-- /app -->
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ── Konstanten ─────────────────────────────────────────────────
+const PROJECTS   = ["Büro","Homeoffice","Baustelle","Meeting","Sonstiges"];
+const PAUSE_OPTS = [0,15,30,45,60];
+const DAYS   = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const MONTHS_S = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+
+// ── State ──────────────────────────────────────────────────────
+let state = {
+  running: false,
+  startTime: null,
+  pauseMin: 30,
+  project: "Büro",
+  note: "",
+  timerInterval: null,
+  elapsed: 0,
+  dayData: null,
+  manPauseMin: 30,
+  manProject: "Büro",
+};
+
+// ── Helpers ────────────────────────────────────────────────────
+function pad(n){ return String(n).padStart(2,"0"); }
+function todayKey(){
+  const d=new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function fmtTime(iso){
+  if(!iso) return "--:--";
+  const d=new Date(iso);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function fmtDur(ms){
+  if(!ms||ms<0) return "0:00";
+  const m=Math.floor(ms/60000);
+  return `${Math.floor(m/60)}:${pad(m%60)}`;
+}
+function fmtDurH(ms){
+  if(!ms||ms<=0) return "–";
+  const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000);
+  return h>0?`${h}h ${m}m`:`${m}m`;
+}
+function dateLabel(key){
+  const [y,m,d]=key.split("-");
+  const dt=new Date(+y,+m-1,+d);
+  return `${DAYS[dt.getDay()]}, ${+d}. ${MONTHS_S[+m-1]} ${y}`;
+}
+
+// ── Storage (localStorage als Fallback) ───────────────────────
+function lsGet(key){ try{ return JSON.parse(localStorage.getItem(key)); }catch{ return null; } }
+function lsSet(key,val){ try{ localStorage.setItem(key,JSON.stringify(val)); }catch{} }
+function lsDel(key){ try{ localStorage.removeItem(key); }catch{} }
+function lsKeys(prefix){
+  const keys=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith(prefix)) keys.push(k.slice(prefix.length));
+  }
+  return keys.sort().reverse();
+}
+
+function saveDay(key,data){ lsSet(`zt:${key}`,data); }
+function loadDay(key){ return lsGet(`zt:${key}`); }
+function deleteDay(key){ lsDel(`zt:${key}`); }
+function allDayKeys(){ return lsKeys("zt:"); }
+
+// ── Toast ──────────────────────────────────────────────────────
+let toastTimer=null;
+function showToast(msg, type="ok"){
+  const el=document.getElementById("toast");
+  el.textContent=msg; el.className=`show ${type}`;
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{ el.className=""; },2600);
+}
+
+// ── Uhr & Datum ────────────────────────────────────────────────
+function updateClock(){
+  const now=new Date();
+  document.getElementById("clock").textContent=
+    `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  document.getElementById("header-sub").textContent=
+    `${DAYS[now.getDay()]}, ${now.getDate()}. ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+}
+setInterval(updateClock,1000); updateClock();
+
+// ── Tabs ───────────────────────────────────────────────────────
+function setTab(tab){
+  ["today","history","stats"].forEach(t=>{
+    document.getElementById(`view-${t}`).classList.toggle("active",t===tab);
+    document.getElementById(`tab-${t}`).classList.toggle("active",t===tab);
+  });
+  if(tab==="history") renderHistory();
+  if(tab==="stats")   renderStats();
+}
+
+// ── Picker aufbauen ────────────────────────────────────────────
+function buildPickers(){
+  // Pause (Stempeluhr)
+  const po=document.getElementById("pause-opts");
+  PAUSE_OPTS.forEach(p=>{
+    const b=document.createElement("button");
+    b.className="picker-opt"+(state.pauseMin===p?" active":"");
+    b.textContent=p===0?"Keine":`${p} Min`;
+    b.onclick=()=>{ state.pauseMin=p; updatePauseChips(); closePicker("pause"); };
+    po.appendChild(b);
+  });
+  // Projekt (Stempeluhr)
+  const prj=document.getElementById("project-opts");
+  PROJECTS.forEach(p=>{
+    const b=document.createElement("button");
+    b.className="picker-opt"+(state.project===p?" active":"");
+    b.textContent=p;
+    b.onclick=()=>{ state.project=p; updateProjectChips(); closePicker("project"); };
+    prj.appendChild(b);
+  });
+  // Manuelle Pause
+  const mpo=document.getElementById("man-pause-opts");
+  PAUSE_OPTS.forEach(p=>{
+    const b=document.createElement("button");
+    b.className="picker-opt"+(state.manPauseMin===p?" active":"");
+    b.textContent=p===0?"Keine":`${p} Min`;
+    b.onclick=()=>{ state.manPauseMin=p; updateManChips(); closePicker("man-pause"); };
+    mpo.appendChild(b);
+  });
+  // Manuelles Projekt
+  const mprj=document.getElementById("man-project-opts");
+  PROJECTS.forEach(p=>{
+    const b=document.createElement("button");
+    b.className="picker-opt"+(state.manProject===p?" active":"");
+    b.textContent=p;
+    b.onclick=()=>{ state.manProject=p; updateManChips(); closePicker("man-project"); };
+    mprj.appendChild(b);
+  });
+}
+
+function updatePauseChips(){
+  document.getElementById("chip-pause").textContent=state.pauseMin===0?"Keine Pause":`${state.pauseMin} Min`;
+  document.querySelectorAll("#pause-opts .picker-opt").forEach((b,i)=>{
+    b.classList.toggle("active",PAUSE_OPTS[i]===state.pauseMin);
+  });
+}
+function updateProjectChips(){
+  document.getElementById("chip-project").textContent=state.project;
+  document.querySelectorAll("#project-opts .picker-opt").forEach((b,i)=>{
+    b.classList.toggle("active",PROJECTS[i]===state.project);
+  });
+}
+function updateManChips(){
+  document.getElementById("man-chip-pause").textContent=state.manPauseMin===0?"Keine Pause":`${state.manPauseMin} Min`;
+  document.getElementById("man-chip-project").textContent=state.manProject;
+  document.querySelectorAll("#man-pause-opts .picker-opt").forEach((b,i)=>{
+    b.classList.toggle("active",PAUSE_OPTS[i]===state.manPauseMin);
+  });
+  document.querySelectorAll("#man-project-opts .picker-opt").forEach((b,i)=>{
+    b.classList.toggle("active",PROJECTS[i]===state.manProject);
+  });
+}
+
+function togglePicker(id){
+  const el=document.getElementById(`picker-${id}`);
+  const shown=el.style.display!=="none";
+  // alle schließen
+  ["pause","project","man-pause","man-project"].forEach(p=>{
+    const e=document.getElementById(`picker-${p}`);
+    if(e) e.style.display="none";
+  });
+  if(!shown) el.style.display="block";
+}
+function closePicker(id){
+  const el=document.getElementById(`picker-${id}`);
+  if(el) el.style.display="none";
+}
+
+// ── Timer-Logik ────────────────────────────────────────────────
+function startTimer(){
+  if(state.timerInterval) clearInterval(state.timerInterval);
+  state.timerInterval=setInterval(()=>{
+    state.elapsed=Date.now()-new Date(state.startTime).getTime();
+    updateTimerUI();
+  },1000);
+}
+function stopTimer(){
+  clearInterval(state.timerInterval);
+  state.timerInterval=null;
+}
+
+function updateTimerUI(){
+  const net=state.elapsed-state.pauseMin*60000;
+  document.getElementById("timer-big").textContent=fmtDur(Math.max(net,0));
+}
+
+// ── Start / Stop ───────────────────────────────────────────────
+function handleMainBtn(){
+  if(!state.running && !state.dayData?.endTime){
+    handleStart();
+  } else if(state.running){
+    handleStop();
+  }
+}
+
+function handleStart(){
+  const now=new Date().toISOString();
+  state.running=true; state.startTime=now; state.elapsed=0;
+  state.note=document.getElementById("note-input").value;
+  const data={running:true,startTime:now,endTime:null,
+    pauseMin:state.pauseMin,project:state.project,note:state.note,date:todayKey()};
+  state.dayData=data;
+  saveDay(todayKey(),data);
+  startTimer();
+  renderTodayUI();
+  showToast("⏱ Stempeluhr gestartet");
+}
+
+function handleStop(){
+  const now=new Date().toISOString();
+  state.running=false;
+  stopTimer();
+  const net=state.elapsed-state.pauseMin*60000;
+  const data={running:false,startTime:state.startTime,endTime:now,
+    pauseMin:state.pauseMin,project:state.project,note:state.note,
+    date:todayKey(),elapsedMs:state.elapsed,netMs:Math.max(net,0)};
+  state.dayData=data;
+  saveDay(todayKey(),data);
+  renderTodayUI();
+  showToast("✅ Erfassung gespeichert");
+}
+
+function handleReset(){
+  state.running=false; state.startTime=null; state.elapsed=0; state.dayData=null;
+  stopTimer();
+  deleteDay(todayKey());
+  renderTodayUI();
+  showToast("🔄 Zurückgesetzt");
+}
+
+// ── Manuell ────────────────────────────────────────────────────
+function openManual(){
+  document.getElementById("manual-collapsed").style.display="none";
+  document.getElementById("manual-expanded").style.display="block";
+  // Default: aktuelle Uhrzeit als Start
+  const now=new Date();
+  const h=pad(now.getHours()), m=pad(now.getMinutes());
+  document.getElementById("man-start").value=`${h}:${m}`;
+}
+function closeManual(){
+  document.getElementById("manual-collapsed").style.display="block";
+  document.getElementById("manual-expanded").style.display="none";
+}
+function saveManual(){
+  const s=document.getElementById("man-start").value;
+  const e=document.getElementById("man-end").value;
+  if(!s||!e){ showToast("Bitte Start und Ende eingeben","err"); return; }
+  const [sh,sm]=s.split(":").map(Number);
+  const [eh,em]=e.split(":").map(Number);
+  const today=new Date();
+  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),sh,sm);
+  const end=new Date(today.getFullYear(),today.getMonth(),today.getDate(),eh,em);
+  if(end<=start){ showToast("Endzeit vor Startzeit!","err"); return; }
+  const ms=end-start;
+  const net=Math.max(ms-state.manPauseMin*60000,0);
+  const note=document.getElementById("man-note").value;
+  const data={running:false,startTime:start.toISOString(),endTime:end.toISOString(),
+    pauseMin:state.manPauseMin,project:state.manProject,note,
+    date:todayKey(),elapsedMs:ms,netMs:net};
+  state.dayData=data; state.pauseMin=state.manPauseMin; state.project=state.manProject;
+  saveDay(todayKey(),data);
+  closeManual();
+  renderTodayUI();
+  showToast("✅ Manuell gespeichert");
+}
+
+// ── Render Today ───────────────────────────────────────────────
+function renderTodayUI(){
+  const d=state.dayData;
+  const done=d&&d.endTime;
+  const running=state.running;
+
+  // Pulse
+  document.getElementById("pulse-dot").style.display=running?"block":"none";
+  document.getElementById("timer-card").classList.toggle("active-card",running);
+
+  // Label
+  document.getElementById("timer-label").textContent=
+    running?"Läuft gerade":done?"Abgeschlossen":"Bereit";
+
+  // Timer
+  if(running){
+    const net=state.elapsed-state.pauseMin*60000;
+    document.getElementById("timer-big").textContent=fmtDur(Math.max(net,0));
+    document.getElementById("timer-sub").textContent=`Netto (abzgl. ${state.pauseMin} Min Pause)`;
+  } else if(d){
+    document.getElementById("timer-big").textContent=fmtDur(d.netMs||0);
+    document.getElementById("timer-sub").textContent=
+      `${fmtTime(d.startTime)} – ${fmtTime(d.endTime)}`;
+  } else {
+    document.getElementById("timer-big").textContent="0:00";
+    document.getElementById("timer-sub").textContent="Heute noch nicht gestempelt";
+  }
+
+  // Chips + Picker + Note
+  const showControls=!running&&!done;
+  document.getElementById("chips-row").style.display=showControls?"flex":"none";
+  document.getElementById("picker-pause").style.display="none";
+  document.getElementById("picker-project").style.display="none";
+  document.getElementById("note-input").style.display=showControls?"block":"none";
+
+  // Hauptbutton
+  const btn=document.getElementById("main-btn");
+  if(done){
+    btn.textContent="🔄  Neu starten";
+    btn.className="btn-main btn-start";
+    btn.onclick=handleReset;
+  } else if(running){
+    btn.textContent="⏹  Stoppen";
+    btn.className="btn-main btn-stop";
+    btn.onclick=handleStop;
+  } else {
+    btn.textContent="▶  Starten";
+    btn.className="btn-main btn-start";
+    btn.onclick=handleStart;
+  }
+
+  // Manuelle Karte
+  document.getElementById("manual-card").style.display=running?"none":"block";
+  if(!running) closeManual();
+
+  // Zusammenfassung
+  const sc=document.getElementById("summary-card");
+  if(d){
+    sc.style.display="block";
+    const items=[
+      ["Start", fmtTime(d.startTime)],
+      ["Ende",  fmtTime(d.endTime)],
+      ["Brutto",fmtDurH(d.elapsedMs||state.elapsed)],
+      ["Pause", d.pauseMin>0?`${d.pauseMin} Min`:"Keine"],
+      ["Netto", fmtDurH(d.netMs)],
+      ["Projekt",d.project||"–"],
+    ];
+    document.getElementById("summary-grid").innerHTML=
+      items.map(([k,v])=>`
+        <div class="summary-item">
+          <div class="summary-key">${k}</div>
+          <div class="summary-val">${v||"–"}</div>
+        </div>`).join("");
+    document.getElementById("summary-note").innerHTML=
+      d.note?`<div class="note-display">💬 ${d.note}</div>`:"";
+  } else {
+    sc.style.display="none";
+  }
+}
+
+// ── Render History ─────────────────────────────────────────────
+function renderHistory(){
+  const keys=allDayKeys().filter(k=>k!==todayKey());
+  // Auch heute anzeigen wenn gespeichert
+  const todayData=loadDay(todayKey());
+  const allKeys=[...(todayData?[todayKey()]:[]),...keys];
+
+  const el=document.getElementById("history-list");
+  if(allKeys.length===0){
+    el.innerHTML=`<div class="empty-state">Noch keine Einträge</div>`; return;
+  }
+  el.innerHTML=allKeys.map(key=>{
+    const data=loadDay(key);
+    if(!data) return "";
+    return `
+      <div class="hist-row">
+        <div>
+          <div class="hist-date">${dateLabel(key)}</div>
+          <div class="hist-meta">
+            ${fmtTime(data.startTime)} – ${fmtTime(data.endTime)}
+            ${data.pauseMin>0?` · ☕ ${data.pauseMin}m`:""}
+            ${data.project?` · 📁 ${data.project}`:""}
+          </div>
+          ${data.note?`<div class="hist-note">💬 ${data.note}</div>`:""}
+        </div>
+        <div class="hist-right">
+          <div class="hist-dur">${fmtDurH(data.netMs)}</div>
+          <button class="del-btn" onclick="deleteDayUI('${key}')">✕</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function deleteDayUI(key){
+  deleteDay(key);
+  if(key===todayKey()){ state.dayData=null; state.running=false; stopTimer(); renderTodayUI(); }
+  renderHistory();
+  showToast("Eintrag gelöscht");
+}
+
+// ── Render Stats ───────────────────────────────────────────────
+function renderStats(){
+  const keys=allDayKeys();
+  const all=keys.map(k=>({key:k,data:loadDay(k)})).filter(h=>h.data?.netMs);
+  const now=new Date();
+  const todayData=loadDay(todayKey());
+
+  // Diese Woche
+  const weekStart=new Date(now); weekStart.setDate(now.getDate()-now.getDay()+1);
+  const weekMs=all.filter(h=>{
+    const d=new Date(h.key); return d>=weekStart&&d<=now;
+  }).reduce((s,h)=>s+h.data.netMs,0);
+  const weekDays=all.filter(h=>{const d=new Date(h.key);return d>=weekStart&&d<=now;}).length;
+
+  // Ø Tag
+  const avgMs=all.length?all.reduce((s,h)=>s+h.data.netMs,0)/all.length:0;
+
+  // Dieser Monat
+  const monthKey=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+  const monthAll=all.filter(h=>h.key.startsWith(monthKey));
+  const monthMs=monthAll.reduce((s,h)=>s+h.data.netMs,0);
+
+  // KPIs
+  document.getElementById("kpi-grid").innerHTML=[
+    {icon:"📅",label:"Diese Woche",val:fmtDurH(weekMs),sub:`${weekDays} Tage`},
+    {icon:"📆",label:"Ø / Tag",    val:fmtDurH(avgMs), sub:`${all.length} Tage ges.`},
+    {icon:"🗓",label:"Dieser Monat",val:fmtDurH(monthMs),sub:`${monthAll.length} Tage`},
+  ].map(({icon,label,val,sub})=>`
+    <div class="kpi-card">
+      <div class="kpi-icon">${icon}</div>
+      <div class="kpi-val">${val}</div>
+      <div class="kpi-label">${label}</div>
+      <div class="kpi-sub">${sub}</div>
+    </div>`).join("");
+
+  // Balkendiagramm letzte 7 Tage
+  const maxMs=9*3600000;
+  const bars=Array.from({length:7},(_,i)=>{
+    const d=new Date(now); d.setDate(now.getDate()-(6-i));
+    const key=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const entry=all.find(h=>h.key===key)||(key===todayKey()&&todayData?{data:todayData}:null);
+    const ms=entry?.data?.netMs||0;
+    const pct=Math.min(ms/maxMs*100,100);
+    return `
+      <div class="bar-col">
+        <div class="bar-track">
+          <div class="bar-fill" style="height:${pct}%"></div>
+        </div>
+        <div class="bar-day">${DAYS[d.getDay()]}</div>
+        ${ms>0?`<div class="bar-val">${fmtDurH(ms)}</div>`:""}
+      </div>`;
+  });
+  document.getElementById("bar-chart").innerHTML=bars.join("");
+
+  // Projekte
+  const projEl=document.getElementById("proj-breakdown");
+  const totalMs=all.reduce((s,h)=>s+h.data.netMs,0);
+  if(totalMs===0){ projEl.innerHTML=`<div class="empty-state">Noch keine Daten</div>`; return; }
+  projEl.innerHTML=PROJECTS.map(proj=>{
+    const ms=all.filter(h=>h.data.project===proj).reduce((s,h)=>s+h.data.netMs,0);
+    const pct=Math.round(ms/totalMs*100);
+    if(pct===0) return "";
+    return `
+      <div class="proj-row">
+        <div class="proj-name">${proj}</div>
+        <div class="proj-bar"><div class="proj-fill" style="width:${pct}%"></div></div>
+        <div class="proj-pct">${pct}%</div>
+      </div>`;
+  }).join("");
+}
+
+// ── Init ───────────────────────────────────────────────────────
+(function init(){
+  buildPickers();
+
+  // Gespeicherten Zustand laden
+  const today=loadDay(todayKey());
+  if(today){
+    state.dayData=today;
+    state.pauseMin=today.pauseMin??30;
+    state.project=today.project??"Büro";
+    state.note=today.note??"";
+    document.getElementById("note-input").value=state.note;
+    if(today.running&&today.startTime){
+      state.running=true;
+      state.startTime=today.startTime;
+      state.elapsed=Date.now()-new Date(today.startTime).getTime();
+      startTimer();
+    }
+    updatePauseChips(); updateProjectChips();
+  }
+  renderTodayUI();
+})();
+</script>
+</body>
+</html>
