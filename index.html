@@ -1,963 +1,1102 @@
-<!DOCTYPE html>
-<html lang="de">
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-
-  <!-- PWA / iPhone Homescreen -->
-  <title>Zeiterfassung</title>
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Zeiterfassung" />
-  <meta name="theme-color" content="#0A0A1A" />
-
-  <!-- App Icon (inline SVG als Data-URL) -->
-  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230A0A1A'/%3E%3Ccircle cx='90' cy='90' r='55' fill='none' stroke='%233B7FE8' stroke-width='8'/%3E%3Cline x1='90' y1='90' x2='90' y2='48' stroke='%23fff' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='90' y1='90' x2='118' y2='100' stroke='%233B7FE8' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='90' cy='90' r='5' fill='%23fff'/%3E%3C/svg%3E" />
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-
-  <style>
-    :root {
-      --safe-top: env(safe-area-inset-top, 44px);
-      --safe-bottom: env(safe-area-inset-bottom, 20px);
-      --blue: #3B7FE8;
-      --purple: #6C63FF;
-      --green: #1E8449;
-      --red: #C0392B;
-      --teal: #0AC2A3;
-      --glass: rgba(28, 28, 42, 0.72);
-      --border: rgba(255,255,255,0.10);
-      --text: #fff;
-      --text-dim: rgba(255,255,255,0.45);
-      --text-faint: rgba(255,255,255,0.25);
-      --radius: 20px;
-      --font: 'Nunito', -apple-system, sans-serif;
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      height: 100%; width: 100%; overflow: hidden;
-      background: #0A0A1A; color: var(--text);
-      font-family: var(--font); -webkit-font-smoothing: antialiased;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none; -webkit-user-select: none;
-    }
-
-    /* ── Hintergrund ── */
-    #bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-    .blob {
-      position: absolute; border-radius: 50%; opacity: 0.16;
-      animation: blob 12s ease-in-out infinite;
-    }
-    .blob1 { width:400px; height:400px; top:-80px; left:-80px;
-              background: radial-gradient(circle, #3B7FE8 0%, transparent 70%); }
-    .blob2 { width:350px; height:350px; bottom:-60px; right:-60px;
-              background: radial-gradient(circle, #6C63FF 0%, transparent 70%);
-              animation-delay: 3s; }
-    .blob3 { width:250px; height:250px; top:40%; right:15%;
-              background: radial-gradient(circle, #0AC2A3 0%, transparent 70%);
-              animation-delay: 6s; }
-
-    /* ── App Shell ── */
-    #app {
-      position: fixed; inset: 0; z-index: 10;
-      display: flex; flex-direction: column;
-      padding-top: var(--safe-top);
-    }
-
-    /* ── Status Bar ── */
-    #status-bar {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 0 24px 8px; font-size: 13px; font-weight: 600;
-    }
-
-    /* ── Header ── */
-    #header {
-      display: flex; justify-content: space-between; align-items: flex-start;
-      padding: 4px 20px 12px;
-    }
-    #header-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 2px; }
-    #header-title { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
-    #avatar-btn {
-      width: 38px; height: 38px; border-radius: 50%;
-      background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
-      border: 1px solid var(--border); display: flex;
-      align-items: center; justify-content: center; font-size: 17px;
-    }
-
-    /* ── Scroll Area ── */
-    #scroll {
-      flex: 1; overflow-y: auto; padding: 0 14px;
-      -webkit-overflow-scrolling: touch;
-    }
-    #scroll::-webkit-scrollbar { display: none; }
-
-    /* ── Cards ── */
-    .card {
-      background: var(--glass); backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 18px; margin-bottom: 12px; position: relative; overflow: hidden;
-    }
-    .card.active-card { border-color: rgba(59,127,232,0.45); box-shadow: 0 0 30px rgba(59,127,232,0.18); }
-
-    /* ── Timer ── */
-    .pulse-dot {
-      position: absolute; top: 16px; right: 16px;
-      width: 10px; height: 10px; border-radius: 50%; background: #4CAF50;
-      animation: pulseDot 2s ease-in-out infinite;
-    }
-    .timer-label { font-size: 11px; color: var(--text-dim); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .timer-big { font-size: 60px; font-weight: 800; letter-spacing: -3px; line-height: 1; margin-bottom: 6px; }
-    .timer-sub  { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; }
-
-    /* ── Chips ── */
-    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-    .chip {
-      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 600;
-      color: rgba(255,255,255,0.8); cursor: pointer; font-family: var(--font);
-      display: flex; align-items: center; gap: 5px; transition: all .15s;
-    }
-    .chip:active { transform: scale(0.95); }
-
-    /* ── Picker ── */
-    .picker { margin-bottom: 14px; }
-    .picker-title { font-size: 10px; color: var(--text-faint); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .picker-row { display: flex; gap: 6px; flex-wrap: wrap; }
-    .picker-opt {
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 12px; padding: 7px 13px; font-size: 12px; font-weight: 600;
-      color: rgba(255,255,255,0.65); cursor: pointer; font-family: var(--font);
-      transition: all .15s;
-    }
-    .picker-opt:active { transform: scale(0.93); }
-    .picker-opt.active {
-      background: rgba(59,127,232,0.25); border-color: rgba(59,127,232,0.55);
-      color: #3B7FE8;
-    }
-
-    /* ── Note Input ── */
-    .note-input {
-      width: 100%; background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.10); border-radius: 12px;
-      padding: 10px 14px; font-size: 13px; font-family: var(--font);
-      color: rgba(255,255,255,0.8); margin-bottom: 16px; outline: none;
-    }
-    .note-input::placeholder { color: rgba(255,255,255,0.25); }
-
-    /* ── Buttons ── */
-    .btn-main {
-      width: 100%; padding: 16px; border-radius: 16px; font-size: 16px;
-      font-weight: 800; letter-spacing: 0.3px; font-family: var(--font);
-      border: none; cursor: pointer; transition: transform .12s, box-shadow .12s;
-    }
-    .btn-main:active { transform: scale(0.97); }
-    .btn-start {
-      background: linear-gradient(135deg, #3B7FE8, #6C63FF);
-      color: #fff; box-shadow: 0 6px 24px rgba(59,127,232,0.4);
-    }
-    .btn-stop {
-      background: linear-gradient(135deg, #E85353, #C0392B);
-      color: #fff; box-shadow: 0 6px 24px rgba(232,83,83,0.4);
-    }
-    .btn-sec {
-      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600;
-      color: rgba(255,255,255,0.7); cursor: pointer; font-family: var(--font);
-      transition: transform .12s;
-    }
-    .btn-sec:active { transform: scale(0.96); }
-    .btn-blue { background: rgba(59,127,232,0.22); border-color: rgba(59,127,232,0.4); color: var(--blue); }
-    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
-
-    /* ── Manuelle Eingabe ── */
-    .man-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
-    .man-field { flex: 1; display: flex; flex-direction: column; gap: 5px; }
-    .man-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; }
-    .time-input {
-      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13);
-      border-radius: 10px; padding: 10px; font-size: 22px; font-weight: 700;
-      color: #fff; width: 100%; font-family: var(--font); outline: none;
-      color-scheme: dark;
-    }
-    .man-arrow { font-size: 18px; color: #555; align-self: flex-end; padding-bottom: 12px; }
-
-    /* ── Section Title ── */
-    .sec-title {
-      font-size: 12px; font-weight: 700; color: var(--text-dim);
-      margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px;
-    }
-
-    /* ── Summary Grid ── */
-    .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-    .summary-item {
-      background: rgba(255,255,255,0.04); border-radius: 12px;
-      padding: 10px 6px; text-align: center;
-    }
-    .summary-key { font-size: 10px; color: var(--text-faint); margin-bottom: 3px; }
-    .summary-val { font-size: 14px; font-weight: 700; color: #fff; }
-    .note-display {
-      margin-top: 10px; padding: 10px 12px;
-      background: rgba(255,255,255,0.04); border-radius: 10px;
-      font-size: 12px; color: var(--text-dim);
-    }
-
-    /* ── History ── */
-    .hist-row {
-      display: flex; justify-content: space-between; align-items: flex-start;
-      padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    .hist-row:last-child { border-bottom: none; }
-    .hist-date { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 3px; }
-    .hist-meta { font-size: 11px; color: var(--text-dim); }
-    .hist-note { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
-    .hist-dur  { font-size: 17px; font-weight: 800; color: var(--blue); }
-    .hist-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-    .del-btn {
-      width: 26px; height: 26px; border-radius: 50%;
-      background: rgba(232,83,83,0.18); border: none;
-      color: #E85353; font-size: 11px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .empty-state { text-align: center; color: var(--text-faint); font-size: 14px; padding: 28px 0; }
-
-    /* ── KPI Grid ── */
-    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-    .kpi-card {
-      background: var(--glass); backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid var(--border); border-radius: 16px;
-      padding: 14px 10px; text-align: center;
-    }
-    .kpi-icon  { font-size: 20px; margin-bottom: 7px; }
-    .kpi-val   { font-size: 17px; font-weight: 800; color: #fff; margin-bottom: 2px; }
-    .kpi-label { font-size: 9px; color: var(--text-faint); margin-bottom: 1px; }
-    .kpi-sub   { font-size: 9px; color: rgba(255,255,255,0.2); }
-
-    /* ── Bar Chart ── */
-    .bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 120px; padding: 8px 0 4px; }
-    .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-    .bar-track {
-      width: 100%; flex: 1; background: rgba(255,255,255,0.06);
-      border-radius: 6px; overflow: hidden;
-      display: flex; flex-direction: column; justify-content: flex-end;
-    }
-    .bar-fill {
-      width: 100%; border-radius: 6px;
-      background: linear-gradient(to top, #3B7FE8, #6C63FF);
-      transition: height 0.6s cubic-bezier(.4,0,.2,1);
-    }
-    .bar-day { font-size: 10px; color: var(--text-faint); }
-    .bar-val { font-size: 8px; color: rgba(59,127,232,0.7); }
-
-    /* ── Project Bars ── */
-    .proj-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .proj-name { font-size: 12px; color: var(--text-dim); width: 82px; flex-shrink: 0; }
-    .proj-bar { flex: 1; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
-    .proj-fill { height: 100%; background: linear-gradient(to right, #3B7FE8, #6C63FF); border-radius: 4px; transition: width .6s cubic-bezier(.4,0,.2,1); }
-    .proj-pct { font-size: 12px; color: var(--blue); font-weight: 700; width: 34px; text-align: right; }
-
-    /* ── Tab Bar ── */
-    #tab-bar {
-      display: flex; justify-content: space-around;
-      background: rgba(14,14,24,0.88); backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-top: 1px solid rgba(255,255,255,0.08);
-      padding: 10px 0; padding-bottom: calc(10px + var(--safe-bottom));
-    }
-    .tab-btn {
-      flex: 1; display: flex; flex-direction: column;
-      align-items: center; gap: 3px; cursor: pointer;
-      border: none; background: none; color: #8E8E9A;
-      font-family: var(--font); padding: 4px 0; transition: all .15s;
-    }
-    .tab-btn:active { transform: scale(0.9); }
-    .tab-icon { font-size: 22px; line-height: 1; }
-    .tab-label { font-size: 10px; font-weight: 600; }
-    .tab-btn.active .tab-label { color: var(--blue); }
-    .tab-btn.active .tab-icon { filter: drop-shadow(0 0 6px rgba(59,127,232,0.6)); }
-
-    /* ── Toast ── */
-    #toast {
-      position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%);
-      padding: 12px 24px; border-radius: 22px; font-size: 14px; font-weight: 700;
-      z-index: 200; display: none; white-space: nowrap;
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      box-shadow: 0 8px 30px rgba(0,0,0,0.3); font-family: var(--font);
-      animation: toastIn 0.3s ease;
-    }
-    #toast.show { display: block; }
-    #toast.ok  { background: rgba(76,175,80,0.92); color: #fff; }
-    #toast.err { background: rgba(232,83,83,0.92); color: #fff; }
-
-    /* ── Animationen ── */
-    @keyframes blob {
-      0%,100% { transform: translate(0,0) scale(1); }
-      33% { transform: translate(18px,-14px) scale(1.05); }
-      66% { transform: translate(-10px,10px) scale(0.97); }
-    }
-    @keyframes pulseDot {
-      0%,100% { opacity:1; transform:scale(1); }
-      50% { opacity:0.4; transform:scale(1.5); }
-    }
-    @keyframes toastIn {
-      from { opacity:0; transform:translateX(-50%) translateY(16px); }
-      to   { opacity:1; transform:translateX(-50%) translateY(0); }
-    }
-
-    /* ── Views ── */
-    .view { display: none; }
-    .view.active { display: block; }
-    .spacer { height: 90px; }
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2685.5">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
   </style>
 </head>
 <body>
-
-<!-- Hintergrund -->
-<div id="bg">
-  <div class="blob blob1"></div>
-  <div class="blob blob2"></div>
-  <div class="blob blob3"></div>
-</div>
-
-<!-- App -->
-<div id="app">
-
-  <!-- Status Bar -->
-  <div id="status-bar">
-    <span id="clock">--:--</span>
-    <div style="display:flex;gap:6px;font-size:11px;">
-      <span>●●●●</span><span>WiFi</span><span>🔋</span>
-    </div>
-  </div>
-
-  <!-- Header -->
-  <div id="header">
-    <div>
-      <div id="header-sub">Datum wird geladen…</div>
-      <div id="header-title">Zeiterfassung</div>
-    </div>
-    <div class="avatar-btn">👤</div>
-  </div>
-
-  <!-- Scroll -->
-  <div id="scroll">
-
-    <!-- ═══ VIEW: HEUTE ═══ -->
-    <div class="view active" id="view-today">
-
-      <!-- Timer-Card -->
-      <div class="card" id="timer-card">
-        <div class="pulse-dot" id="pulse-dot" style="display:none"></div>
-        <div class="timer-label" id="timer-label">Bereit</div>
-        <div class="timer-big" id="timer-big">0:00</div>
-        <div class="timer-sub" id="timer-sub">Noch nicht gestempelt</div>
-
-        <!-- Chips (nur vor Start) -->
-        <div class="chips" id="chips-row">
-          <button class="chip" onclick="togglePicker('pause')">☕ <span id="chip-pause">30 Min</span></button>
-          <button class="chip" onclick="togglePicker('project')">📁 <span id="chip-project">Büro</span></button>
-        </div>
-
-        <!-- Pause Picker -->
-        <div class="picker" id="picker-pause" style="display:none">
-          <div class="picker-title">Pause wählen</div>
-          <div class="picker-row" id="pause-opts"></div>
-        </div>
-
-        <!-- Projekt Picker -->
-        <div class="picker" id="picker-project" style="display:none">
-          <div class="picker-title">Projekt wählen</div>
-          <div class="picker-row" id="project-opts"></div>
-        </div>
-
-        <!-- Notiz -->
-        <input class="note-input" id="note-input" placeholder="Notiz (optional)…" />
-
-        <!-- Haupt-Button -->
-        <button class="btn-main btn-start" id="main-btn" onclick="handleMainBtn()">▶  Starten</button>
-      </div>
-
-      <!-- Manuelle Eingabe -->
-      <div class="card" id="manual-card">
-        <div class="sec-title">✏️ Manuell erfassen</div>
-        <div id="manual-collapsed">
-          <button class="btn-sec" style="width:100%" onclick="openManual()">+ Zeit manuell eintragen</button>
-        </div>
-        <div id="manual-expanded" style="display:none">
-          <div class="man-row">
-            <div class="man-field">
-              <div class="man-label">Start</div>
-              <input type="time" class="time-input" id="man-start" />
-            </div>
-            <div class="man-arrow">→</div>
-            <div class="man-field">
-              <div class="man-label">Ende</div>
-              <input type="time" class="time-input" id="man-end" />
-            </div>
-          </div>
-          <div class="chips">
-            <button class="chip" onclick="togglePicker('man-pause')">☕ <span id="man-chip-pause">30 Min</span></button>
-            <button class="chip" onclick="togglePicker('man-project')">📁 <span id="man-chip-project">Büro</span></button>
-          </div>
-          <div class="picker" id="picker-man-pause" style="display:none">
-            <div class="picker-title">Pause wählen</div>
-            <div class="picker-row" id="man-pause-opts"></div>
-          </div>
-          <div class="picker" id="picker-man-project" style="display:none">
-            <div class="picker-title">Projekt wählen</div>
-            <div class="picker-row" id="man-project-opts"></div>
-          </div>
-          <input class="note-input" id="man-note" placeholder="Notiz…" />
-          <div class="btn-row">
-            <button class="btn-sec" onclick="closeManual()">Abbrechen</button>
-            <button class="btn-sec btn-blue" style="flex:2" onclick="saveManual()">💾 Speichern</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Zusammenfassung -->
-      <div class="card" id="summary-card" style="display:none">
-        <div class="sec-title">📋 Heute im Überblick</div>
-        <div class="summary-grid" id="summary-grid"></div>
-        <div id="summary-note"></div>
-      </div>
-
-      <div class="spacer"></div>
-    </div>
-
-    <!-- ═══ VIEW: VERLAUF ═══ -->
-    <div class="view" id="view-history">
-      <div class="card">
-        <div class="sec-title">🗓 Alle Einträge</div>
-        <div id="history-list"></div>
-      </div>
-      <div class="spacer"></div>
-    </div>
-
-    <!-- ═══ VIEW: STATISTIK ═══ -->
-    <div class="view" id="view-stats">
-      <div class="kpi-grid" id="kpi-grid"></div>
-      <div class="card">
-        <div class="sec-title">📊 Letzte 7 Tage</div>
-        <div class="bar-chart" id="bar-chart"></div>
-      </div>
-      <div class="card">
-        <div class="sec-title">📁 Nach Projekt</div>
-        <div id="proj-breakdown"></div>
-      </div>
-      <div class="spacer"></div>
-    </div>
-
-  </div><!-- /scroll -->
-
-  <!-- Tab Bar -->
-  <div id="tab-bar">
-    <button class="tab-btn active" onclick="setTab('today')" id="tab-today">
-      <span class="tab-icon">⏱</span>
-      <span class="tab-label">Heute</span>
-    </button>
-    <button class="tab-btn" onclick="setTab('history')" id="tab-history">
-      <span class="tab-icon">📋</span>
-      <span class="tab-label">Verlauf</span>
-    </button>
-    <button class="tab-btn" onclick="setTab('stats')" id="tab-stats">
-      <span class="tab-icon">📊</span>
-      <span class="tab-label">Statistik</span>
-    </button>
-  </div>
-
-</div><!-- /app -->
-
-<!-- Toast -->
-<div id="toast"></div>
-
-<script>
-// ── Konstanten ─────────────────────────────────────────────────
-const PROJECTS   = ["Büro","Homeoffice","Baustelle","Meeting","Sonstiges"];
-const PAUSE_OPTS = [0,15,30,45,60];
-const DAYS   = ["So","Mo","Di","Mi","Do","Fr","Sa"];
-const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
-const MONTHS_S = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
-
-// ── State ──────────────────────────────────────────────────────
-let state = {
-  running: false,
-  startTime: null,
-  pauseMin: 30,
-  project: "Büro",
-  note: "",
-  timerInterval: null,
-  elapsed: 0,
-  dayData: null,
-  manPauseMin: 30,
-  manProject: "Büro",
-};
-
-// ── Helpers ────────────────────────────────────────────────────
-function pad(n){ return String(n).padStart(2,"0"); }
-function todayKey(){
-  const d=new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-}
-function fmtTime(iso){
-  if(!iso) return "--:--";
-  const d=new Date(iso);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function fmtDur(ms){
-  if(!ms||ms<0) return "0:00";
-  const m=Math.floor(ms/60000);
-  return `${Math.floor(m/60)}:${pad(m%60)}`;
-}
-function fmtDurH(ms){
-  if(!ms||ms<=0) return "–";
-  const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000);
-  return h>0?`${h}h ${m}m`:`${m}m`;
-}
-function dateLabel(key){
-  const [y,m,d]=key.split("-");
-  const dt=new Date(+y,+m-1,+d);
-  return `${DAYS[dt.getDay()]}, ${+d}. ${MONTHS_S[+m-1]} ${y}`;
-}
-
-// ── Storage (localStorage als Fallback) ───────────────────────
-function lsGet(key){ try{ return JSON.parse(localStorage.getItem(key)); }catch{ return null; } }
-function lsSet(key,val){ try{ localStorage.setItem(key,JSON.stringify(val)); }catch{} }
-function lsDel(key){ try{ localStorage.removeItem(key); }catch{} }
-function lsKeys(prefix){
-  const keys=[];
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.startsWith(prefix)) keys.push(k.slice(prefix.length));
-  }
-  return keys.sort().reverse();
-}
-
-function saveDay(key,data){ lsSet(`zt:${key}`,data); }
-function loadDay(key){ return lsGet(`zt:${key}`); }
-function deleteDay(key){ lsDel(`zt:${key}`); }
-function allDayKeys(){ return lsKeys("zt:"); }
-
-// ── Toast ──────────────────────────────────────────────────────
-let toastTimer=null;
-function showToast(msg, type="ok"){
-  const el=document.getElementById("toast");
-  el.textContent=msg; el.className=`show ${type}`;
-  if(toastTimer) clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>{ el.className=""; },2600);
-}
-
-// ── Uhr & Datum ────────────────────────────────────────────────
-function updateClock(){
-  const now=new Date();
-  document.getElementById("clock").textContent=
-    `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  document.getElementById("header-sub").textContent=
-    `${DAYS[now.getDay()]}, ${now.getDate()}. ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
-}
-setInterval(updateClock,1000); updateClock();
-
-// ── Tabs ───────────────────────────────────────────────────────
-function setTab(tab){
-  ["today","history","stats"].forEach(t=>{
-    document.getElementById(`view-${t}`).classList.toggle("active",t===tab);
-    document.getElementById(`tab-${t}`).classList.toggle("active",t===tab);
-  });
-  if(tab==="history") renderHistory();
-  if(tab==="stats")   renderStats();
-}
-
-// ── Picker aufbauen ────────────────────────────────────────────
-function buildPickers(){
-  // Pause (Stempeluhr)
-  const po=document.getElementById("pause-opts");
-  PAUSE_OPTS.forEach(p=>{
-    const b=document.createElement("button");
-    b.className="picker-opt"+(state.pauseMin===p?" active":"");
-    b.textContent=p===0?"Keine":`${p} Min`;
-    b.onclick=()=>{ state.pauseMin=p; updatePauseChips(); closePicker("pause"); };
-    po.appendChild(b);
-  });
-  // Projekt (Stempeluhr)
-  const prj=document.getElementById("project-opts");
-  PROJECTS.forEach(p=>{
-    const b=document.createElement("button");
-    b.className="picker-opt"+(state.project===p?" active":"");
-    b.textContent=p;
-    b.onclick=()=>{ state.project=p; updateProjectChips(); closePicker("project"); };
-    prj.appendChild(b);
-  });
-  // Manuelle Pause
-  const mpo=document.getElementById("man-pause-opts");
-  PAUSE_OPTS.forEach(p=>{
-    const b=document.createElement("button");
-    b.className="picker-opt"+(state.manPauseMin===p?" active":"");
-    b.textContent=p===0?"Keine":`${p} Min`;
-    b.onclick=()=>{ state.manPauseMin=p; updateManChips(); closePicker("man-pause"); };
-    mpo.appendChild(b);
-  });
-  // Manuelles Projekt
-  const mprj=document.getElementById("man-project-opts");
-  PROJECTS.forEach(p=>{
-    const b=document.createElement("button");
-    b.className="picker-opt"+(state.manProject===p?" active":"");
-    b.textContent=p;
-    b.onclick=()=>{ state.manProject=p; updateManChips(); closePicker("man-project"); };
-    mprj.appendChild(b);
-  });
-}
-
-function updatePauseChips(){
-  document.getElementById("chip-pause").textContent=state.pauseMin===0?"Keine Pause":`${state.pauseMin} Min`;
-  document.querySelectorAll("#pause-opts .picker-opt").forEach((b,i)=>{
-    b.classList.toggle("active",PAUSE_OPTS[i]===state.pauseMin);
-  });
-}
-function updateProjectChips(){
-  document.getElementById("chip-project").textContent=state.project;
-  document.querySelectorAll("#project-opts .picker-opt").forEach((b,i)=>{
-    b.classList.toggle("active",PROJECTS[i]===state.project);
-  });
-}
-function updateManChips(){
-  document.getElementById("man-chip-pause").textContent=state.manPauseMin===0?"Keine Pause":`${state.manPauseMin} Min`;
-  document.getElementById("man-chip-project").textContent=state.manProject;
-  document.querySelectorAll("#man-pause-opts .picker-opt").forEach((b,i)=>{
-    b.classList.toggle("active",PAUSE_OPTS[i]===state.manPauseMin);
-  });
-  document.querySelectorAll("#man-project-opts .picker-opt").forEach((b,i)=>{
-    b.classList.toggle("active",PROJECTS[i]===state.manProject);
-  });
-}
-
-function togglePicker(id){
-  const el=document.getElementById(`picker-${id}`);
-  const shown=el.style.display!=="none";
-  // alle schließen
-  ["pause","project","man-pause","man-project"].forEach(p=>{
-    const e=document.getElementById(`picker-${p}`);
-    if(e) e.style.display="none";
-  });
-  if(!shown) el.style.display="block";
-}
-function closePicker(id){
-  const el=document.getElementById(`picker-${id}`);
-  if(el) el.style.display="none";
-}
-
-// ── Timer-Logik ────────────────────────────────────────────────
-function startTimer(){
-  if(state.timerInterval) clearInterval(state.timerInterval);
-  state.timerInterval=setInterval(()=>{
-    state.elapsed=Date.now()-new Date(state.startTime).getTime();
-    updateTimerUI();
-  },1000);
-}
-function stopTimer(){
-  clearInterval(state.timerInterval);
-  state.timerInterval=null;
-}
-
-function updateTimerUI(){
-  const net=state.elapsed-state.pauseMin*60000;
-  document.getElementById("timer-big").textContent=fmtDur(Math.max(net,0));
-}
-
-// ── Start / Stop ───────────────────────────────────────────────
-function handleMainBtn(){
-  if(!state.running && !state.dayData?.endTime){
-    handleStart();
-  } else if(state.running){
-    handleStop();
-  }
-}
-
-function handleStart(){
-  const now=new Date().toISOString();
-  state.running=true; state.startTime=now; state.elapsed=0;
-  state.note=document.getElementById("note-input").value;
-  const data={running:true,startTime:now,endTime:null,
-    pauseMin:state.pauseMin,project:state.project,note:state.note,date:todayKey()};
-  state.dayData=data;
-  saveDay(todayKey(),data);
-  startTimer();
-  renderTodayUI();
-  showToast("⏱ Stempeluhr gestartet");
-}
-
-function handleStop(){
-  const now=new Date().toISOString();
-  state.running=false;
-  stopTimer();
-  const net=state.elapsed-state.pauseMin*60000;
-  const data={running:false,startTime:state.startTime,endTime:now,
-    pauseMin:state.pauseMin,project:state.project,note:state.note,
-    date:todayKey(),elapsedMs:state.elapsed,netMs:Math.max(net,0)};
-  state.dayData=data;
-  saveDay(todayKey(),data);
-  renderTodayUI();
-  showToast("✅ Erfassung gespeichert");
-}
-
-function handleReset(){
-  state.running=false; state.startTime=null; state.elapsed=0; state.dayData=null;
-  stopTimer();
-  deleteDay(todayKey());
-  renderTodayUI();
-  showToast("🔄 Zurückgesetzt");
-}
-
-// ── Manuell ────────────────────────────────────────────────────
-function openManual(){
-  document.getElementById("manual-collapsed").style.display="none";
-  document.getElementById("manual-expanded").style.display="block";
-  // Default: aktuelle Uhrzeit als Start
-  const now=new Date();
-  const h=pad(now.getHours()), m=pad(now.getMinutes());
-  document.getElementById("man-start").value=`${h}:${m}`;
-}
-function closeManual(){
-  document.getElementById("manual-collapsed").style.display="block";
-  document.getElementById("manual-expanded").style.display="none";
-}
-function saveManual(){
-  const s=document.getElementById("man-start").value;
-  const e=document.getElementById("man-end").value;
-  if(!s||!e){ showToast("Bitte Start und Ende eingeben","err"); return; }
-  const [sh,sm]=s.split(":").map(Number);
-  const [eh,em]=e.split(":").map(Number);
-  const today=new Date();
-  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),sh,sm);
-  const end=new Date(today.getFullYear(),today.getMonth(),today.getDate(),eh,em);
-  if(end<=start){ showToast("Endzeit vor Startzeit!","err"); return; }
-  const ms=end-start;
-  const net=Math.max(ms-state.manPauseMin*60000,0);
-  const note=document.getElementById("man-note").value;
-  const data={running:false,startTime:start.toISOString(),endTime:end.toISOString(),
-    pauseMin:state.manPauseMin,project:state.manProject,note,
-    date:todayKey(),elapsedMs:ms,netMs:net};
-  state.dayData=data; state.pauseMin=state.manPauseMin; state.project=state.manProject;
-  saveDay(todayKey(),data);
-  closeManual();
-  renderTodayUI();
-  showToast("✅ Manuell gespeichert");
-}
-
-// ── Render Today ───────────────────────────────────────────────
-function renderTodayUI(){
-  const d=state.dayData;
-  const done=d&&d.endTime;
-  const running=state.running;
-
-  // Pulse
-  document.getElementById("pulse-dot").style.display=running?"block":"none";
-  document.getElementById("timer-card").classList.toggle("active-card",running);
-
-  // Label
-  document.getElementById("timer-label").textContent=
-    running?"Läuft gerade":done?"Abgeschlossen":"Bereit";
-
-  // Timer
-  if(running){
-    const net=state.elapsed-state.pauseMin*60000;
-    document.getElementById("timer-big").textContent=fmtDur(Math.max(net,0));
-    document.getElementById("timer-sub").textContent=`Netto (abzgl. ${state.pauseMin} Min Pause)`;
-  } else if(d){
-    document.getElementById("timer-big").textContent=fmtDur(d.netMs||0);
-    document.getElementById("timer-sub").textContent=
-      `${fmtTime(d.startTime)} – ${fmtTime(d.endTime)}`;
-  } else {
-    document.getElementById("timer-big").textContent="0:00";
-    document.getElementById("timer-sub").textContent="Heute noch nicht gestempelt";
-  }
-
-  // Chips + Picker + Note
-  const showControls=!running&&!done;
-  document.getElementById("chips-row").style.display=showControls?"flex":"none";
-  document.getElementById("picker-pause").style.display="none";
-  document.getElementById("picker-project").style.display="none";
-  document.getElementById("note-input").style.display=showControls?"block":"none";
-
-  // Hauptbutton
-  const btn=document.getElementById("main-btn");
-  if(done){
-    btn.textContent="🔄  Neu starten";
-    btn.className="btn-main btn-start";
-    btn.onclick=handleReset;
-  } else if(running){
-    btn.textContent="⏹  Stoppen";
-    btn.className="btn-main btn-stop";
-    btn.onclick=handleStop;
-  } else {
-    btn.textContent="▶  Starten";
-    btn.className="btn-main btn-start";
-    btn.onclick=handleStart;
-  }
-
-  // Manuelle Karte
-  document.getElementById("manual-card").style.display=running?"none":"block";
-  if(!running) closeManual();
-
-  // Zusammenfassung
-  const sc=document.getElementById("summary-card");
-  if(d){
-    sc.style.display="block";
-    const items=[
-      ["Start", fmtTime(d.startTime)],
-      ["Ende",  fmtTime(d.endTime)],
-      ["Brutto",fmtDurH(d.elapsedMs||state.elapsed)],
-      ["Pause", d.pauseMin>0?`${d.pauseMin} Min`:"Keine"],
-      ["Netto", fmtDurH(d.netMs)],
-      ["Projekt",d.project||"–"],
-    ];
-    document.getElementById("summary-grid").innerHTML=
-      items.map(([k,v])=>`
-        <div class="summary-item">
-          <div class="summary-key">${k}</div>
-          <div class="summary-val">${v||"–"}</div>
-        </div>`).join("");
-    document.getElementById("summary-note").innerHTML=
-      d.note?`<div class="note-display">💬 ${d.note}</div>`:"";
-  } else {
-    sc.style.display="none";
-  }
-}
-
-// ── Render History ─────────────────────────────────────────────
-function renderHistory(){
-  const keys=allDayKeys().filter(k=>k!==todayKey());
-  // Auch heute anzeigen wenn gespeichert
-  const todayData=loadDay(todayKey());
-  const allKeys=[...(todayData?[todayKey()]:[]),...keys];
-
-  const el=document.getElementById("history-list");
-  if(allKeys.length===0){
-    el.innerHTML=`<div class="empty-state">Noch keine Einträge</div>`; return;
-  }
-  el.innerHTML=allKeys.map(key=>{
-    const data=loadDay(key);
-    if(!data) return "";
-    return `
-      <div class="hist-row">
-        <div>
-          <div class="hist-date">${dateLabel(key)}</div>
-          <div class="hist-meta">
-            ${fmtTime(data.startTime)} – ${fmtTime(data.endTime)}
-            ${data.pauseMin>0?` · ☕ ${data.pauseMin}m`:""}
-            ${data.project?` · 📁 ${data.project}`:""}
-          </div>
-          ${data.note?`<div class="hist-note">💬 ${data.note}</div>`:""}
-        </div>
-        <div class="hist-right">
-          <div class="hist-dur">${fmtDurH(data.netMs)}</div>
-          <button class="del-btn" onclick="deleteDayUI('${key}')">✕</button>
-        </div>
-      </div>`;
-  }).join("");
-}
-
-function deleteDayUI(key){
-  deleteDay(key);
-  if(key===todayKey()){ state.dayData=null; state.running=false; stopTimer(); renderTodayUI(); }
-  renderHistory();
-  showToast("Eintrag gelöscht");
-}
-
-// ── Render Stats ───────────────────────────────────────────────
-function renderStats(){
-  const keys=allDayKeys();
-  const all=keys.map(k=>({key:k,data:loadDay(k)})).filter(h=>h.data?.netMs);
-  const now=new Date();
-  const todayData=loadDay(todayKey());
-
-  // Diese Woche
-  const weekStart=new Date(now); weekStart.setDate(now.getDate()-now.getDay()+1);
-  const weekMs=all.filter(h=>{
-    const d=new Date(h.key); return d>=weekStart&&d<=now;
-  }).reduce((s,h)=>s+h.data.netMs,0);
-  const weekDays=all.filter(h=>{const d=new Date(h.key);return d>=weekStart&&d<=now;}).length;
-
-  // Ø Tag
-  const avgMs=all.length?all.reduce((s,h)=>s+h.data.netMs,0)/all.length:0;
-
-  // Dieser Monat
-  const monthKey=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;
-  const monthAll=all.filter(h=>h.key.startsWith(monthKey));
-  const monthMs=monthAll.reduce((s,h)=>s+h.data.netMs,0);
-
-  // KPIs
-  document.getElementById("kpi-grid").innerHTML=[
-    {icon:"📅",label:"Diese Woche",val:fmtDurH(weekMs),sub:`${weekDays} Tage`},
-    {icon:"📆",label:"Ø / Tag",    val:fmtDurH(avgMs), sub:`${all.length} Tage ges.`},
-    {icon:"🗓",label:"Dieser Monat",val:fmtDurH(monthMs),sub:`${monthAll.length} Tage`},
-  ].map(({icon,label,val,sub})=>`
-    <div class="kpi-card">
-      <div class="kpi-icon">${icon}</div>
-      <div class="kpi-val">${val}</div>
-      <div class="kpi-label">${label}</div>
-      <div class="kpi-sub">${sub}</div>
-    </div>`).join("");
-
-  // Balkendiagramm letzte 7 Tage
-  const maxMs=9*3600000;
-  const bars=Array.from({length:7},(_,i)=>{
-    const d=new Date(now); d.setDate(now.getDate()-(6-i));
-    const key=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    const entry=all.find(h=>h.key===key)||(key===todayKey()&&todayData?{data:todayData}:null);
-    const ms=entry?.data?.netMs||0;
-    const pct=Math.min(ms/maxMs*100,100);
-    return `
-      <div class="bar-col">
-        <div class="bar-track">
-          <div class="bar-fill" style="height:${pct}%"></div>
-        </div>
-        <div class="bar-day">${DAYS[d.getDay()]}</div>
-        ${ms>0?`<div class="bar-val">${fmtDurH(ms)}</div>`:""}
-      </div>`;
-  });
-  document.getElementById("bar-chart").innerHTML=bars.join("");
-
-  // Projekte
-  const projEl=document.getElementById("proj-breakdown");
-  const totalMs=all.reduce((s,h)=>s+h.data.netMs,0);
-  if(totalMs===0){ projEl.innerHTML=`<div class="empty-state">Noch keine Daten</div>`; return; }
-  projEl.innerHTML=PROJECTS.map(proj=>{
-    const ms=all.filter(h=>h.data.project===proj).reduce((s,h)=>s+h.data.netMs,0);
-    const pct=Math.round(ms/totalMs*100);
-    if(pct===0) return "";
-    return `
-      <div class="proj-row">
-        <div class="proj-name">${proj}</div>
-        <div class="proj-bar"><div class="proj-fill" style="width:${pct}%"></div></div>
-        <div class="proj-pct">${pct}%</div>
-      </div>`;
-  }).join("");
-}
-
-// ── Init ───────────────────────────────────────────────────────
-(function init(){
-  buildPickers();
-
-  // Gespeicherten Zustand laden
-  const today=loadDay(todayKey());
-  if(today){
-    state.dayData=today;
-    state.pauseMin=today.pauseMin??30;
-    state.project=today.project??"Büro";
-    state.note=today.note??"";
-    document.getElementById("note-input").value=state.note;
-    if(today.running&&today.startTime){
-      state.running=true;
-      state.startTime=today.startTime;
-      state.elapsed=Date.now()-new Date(today.startTime).getTime();
-      startTimer();
-    }
-    updatePauseChips(); updateProjectChips();
-  }
-  renderTodayUI();
-})();
-</script>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html lang="de"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta charset="UTF-8" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" /&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;!-- PWA / iPhone Homescreen --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;title&gt;Zeiterfassung&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="apple-mobile-web-app-capable" content="yes" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="apple-mobile-web-app-title" content="Zeiterfassung" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="theme-color" content="#0A0A1A" /&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;!-- App Icon (inline SVG als Data-URL) --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230A0A1A'/%3E%3Ccircle cx='90' cy='90' r='55' fill='none' stroke='%233B7FE8' stroke-width='8'/%3E%3Cline x1='90' y1='90' x2='90' y2='48' stroke='%23fff' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='90' y1='90' x2='118' y2='100' stroke='%233B7FE8' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='90' cy='90' r='5' fill='%23fff'/%3E%3C/svg%3E" /&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;link rel="preconnect" href="https://fonts.googleapis.com" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" /&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>:root {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--safe-top: env(safe-area-inset-top, 44px);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--safe-bottom: env(safe-area-inset-bottom, 20px);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--blue: #3B7FE8;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--purple: #6C63FF;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--green: #1E8449;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--red: #C0392B;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--teal: #0AC2A3;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--glass: rgba(28, 28, 42, 0.72);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--border: rgba(255,255,255,0.10);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--text: #fff;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--text-dim: rgba(255,255,255,0.45);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--text-faint: rgba(255,255,255,0.25);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--radius: 20px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>--font: 'Nunito', -apple-system, sans-serif;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html, body {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>height: 100%; width: 100%; overflow: hidden;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: #0A0A1A; color: var(--text);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-family: var(--font); -webkit-font-smoothing: antialiased;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>-webkit-tap-highlight-color: transparent;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>user-select: none; -webkit-user-select: none;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Hintergrund ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.blob {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>position: absolute; border-radius: 50%; opacity: 0.16;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>animation: blob 12s ease-in-out infinite;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.blob1 { width:400px; height:400px; top:-80px; left:-80px;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>background: radial-gradient(circle, #3B7FE8 0%, transparent 70%); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.blob2 { width:350px; height:350px; bottom:-60px; right:-60px;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>background: radial-gradient(circle, #6C63FF 0%, transparent 70%);</p>
+<p class="p1"><span class="Apple-converted-space">              </span>animation-delay: 3s; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.blob3 { width:250px; height:250px; top:40%; right:15%;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>background: radial-gradient(circle, #0AC2A3 0%, transparent 70%);</p>
+<p class="p1"><span class="Apple-converted-space">              </span>animation-delay: 6s; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── App Shell ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#app {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>position: fixed; inset: 0; z-index: 10;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex; flex-direction: column;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding-top: var(--safe-top);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Status Bar ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#status-bar {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex; justify-content: space-between; align-items: center;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 0 24px 8px; font-size: 13px; font-weight: 600;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Header ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#header {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex; justify-content: space-between; align-items: flex-start;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 4px 20px 12px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#header-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 2px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#header-title { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#avatar-btn {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 38px; height: 38px; border-radius: 50%;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border: 1px solid var(--border); display: flex;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>align-items: center; justify-content: center; font-size: 17px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Scroll Area ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#scroll {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>flex: 1; overflow-y: auto; padding: 0 14px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>-webkit-overflow-scrolling: touch;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#scroll::-webkit-scrollbar { display: none; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Cards ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.card {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: var(--glass); backdrop-filter: blur(24px) saturate(180%);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>-webkit-backdrop-filter: blur(24px) saturate(180%);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border: 1px solid var(--border); border-radius: var(--radius);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 18px; margin-bottom: 12px; position: relative; overflow: hidden;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.card.active-card { border-color: rgba(59,127,232,0.45); box-shadow: 0 0 30px rgba(59,127,232,0.18); }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Timer ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.pulse-dot {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>position: absolute; top: 16px; right: 16px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 10px; height: 10px; border-radius: 50%; background: #4CAF50;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>animation: pulseDot 2s ease-in-out infinite;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.timer-label { font-size: 11px; color: var(--text-dim); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.timer-big { font-size: 60px; font-weight: 800; letter-spacing: -3px; line-height: 1; margin-bottom: 6px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.timer-sub<span class="Apple-converted-space">  </span>{ font-size: 12px; color: var(--text-dim); margin-bottom: 16px; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Chips ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.chip {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 600;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: rgba(255,255,255,0.8); cursor: pointer; font-family: var(--font);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex; align-items: center; gap: 5px; transition: all .15s;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.chip:active { transform: scale(0.95); }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Picker ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.picker { margin-bottom: 14px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.picker-title { font-size: 10px; color: var(--text-faint); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.picker-row { display: flex; gap: 6px; flex-wrap: wrap; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.picker-opt {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border-radius: 12px; padding: 7px 13px; font-size: 12px; font-weight: 600;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: rgba(255,255,255,0.65); cursor: pointer; font-family: var(--font);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>transition: all .15s;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.picker-opt:active { transform: scale(0.93); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.picker-opt.active {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(59,127,232,0.25); border-color: rgba(59,127,232,0.55);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: #3B7FE8;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Note Input ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.note-input {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 100%; background: rgba(255,255,255,0.05);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border: 1px solid rgba(255,255,255,0.10); border-radius: 12px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 10px 14px; font-size: 13px; font-family: var(--font);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: rgba(255,255,255,0.8); margin-bottom: 16px; outline: none;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.note-input::placeholder { color: rgba(255,255,255,0.25); }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Buttons ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.btn-main {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 100%; padding: 16px; border-radius: 16px; font-size: 16px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-weight: 800; letter-spacing: 0.3px; font-family: var(--font);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border: none; cursor: pointer; transition: transform .12s, box-shadow .12s;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.btn-main:active { transform: scale(0.97); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.btn-start {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: linear-gradient(135deg, #3B7FE8, #6C63FF);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: #fff; box-shadow: 0 6px 24px rgba(59,127,232,0.4);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.btn-stop {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: linear-gradient(135deg, #E85353, #C0392B);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: #fff; box-shadow: 0 6px 24px rgba(232,83,83,0.4);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.btn-sec {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: rgba(255,255,255,0.7); cursor: pointer; font-family: var(--font);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>transition: transform .12s;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.btn-sec:active { transform: scale(0.96); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.btn-blue { background: rgba(59,127,232,0.22); border-color: rgba(59,127,232,0.4); color: var(--blue); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.btn-row { display: flex; gap: 8px; margin-top: 12px; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Manuelle Eingabe ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.man-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 12px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.man-field { flex: 1; display: flex; flex-direction: column; gap: 5px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.man-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.time-input {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border-radius: 10px; padding: 10px; font-size: 22px; font-weight: 700;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: #fff; width: 100%; font-family: var(--font); outline: none;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color-scheme: dark;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.man-arrow { font-size: 18px; color: #555; align-self: flex-end; padding-bottom: 12px; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Section Title ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.sec-title {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-size: 12px; font-weight: 700; color: var(--text-dim);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Summary Grid ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.summary-item {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(255,255,255,0.04); border-radius: 12px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 10px 6px; text-align: center;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.summary-key { font-size: 10px; color: var(--text-faint); margin-bottom: 3px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.summary-val { font-size: 14px; font-weight: 700; color: #fff; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.note-display {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>margin-top: 10px; padding: 10px 12px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(255,255,255,0.04); border-radius: 10px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-size: 12px; color: var(--text-dim);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── History ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.hist-row {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex; justify-content: space-between; align-items: flex-start;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.06);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.hist-row:last-child { border-bottom: none; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.hist-date { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 3px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.hist-meta { font-size: 11px; color: var(--text-dim); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.hist-note { font-size: 11px; color: var(--text-faint); margin-top: 2px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.hist-dur<span class="Apple-converted-space">  </span>{ font-size: 17px; font-weight: 800; color: var(--blue); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.hist-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.del-btn {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 26px; height: 26px; border-radius: 50%;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(232,83,83,0.18); border: none;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: #E85353; font-size: 11px; cursor: pointer;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex; align-items: center; justify-content: center;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.empty-state { text-align: center; color: var(--text-faint); font-size: 14px; padding: 28px 0; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── KPI Grid ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.kpi-card {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: var(--glass); backdrop-filter: blur(24px) saturate(180%);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>-webkit-backdrop-filter: blur(24px) saturate(180%);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border: 1px solid var(--border); border-radius: 16px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 14px 10px; text-align: center;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.kpi-icon<span class="Apple-converted-space">  </span>{ font-size: 20px; margin-bottom: 7px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.kpi-val <span class="Apple-converted-space">  </span>{ font-size: 17px; font-weight: 800; color: #fff; margin-bottom: 2px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.kpi-label { font-size: 9px; color: var(--text-faint); margin-bottom: 1px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.kpi-sub <span class="Apple-converted-space">  </span>{ font-size: 9px; color: rgba(255,255,255,0.2); }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Bar Chart ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 120px; padding: 8px 0 4px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.bar-track {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 100%; flex: 1; background: rgba(255,255,255,0.06);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border-radius: 6px; overflow: hidden;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex; flex-direction: column; justify-content: flex-end;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.bar-fill {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 100%; border-radius: 6px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: linear-gradient(to top, #3B7FE8, #6C63FF);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>transition: height 0.6s cubic-bezier(.4,0,.2,1);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.bar-day { font-size: 10px; color: var(--text-faint); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.bar-val { font-size: 8px; color: rgba(59,127,232,0.7); }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Project Bars ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.proj-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.proj-name { font-size: 12px; color: var(--text-dim); width: 82px; flex-shrink: 0; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.proj-bar { flex: 1; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.proj-fill { height: 100%; background: linear-gradient(to right, #3B7FE8, #6C63FF); border-radius: 4px; transition: width .6s cubic-bezier(.4,0,.2,1); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.proj-pct { font-size: 12px; color: var(--blue); font-weight: 700; width: 34px; text-align: right; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Tab Bar ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#tab-bar {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex; justify-content: space-around;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: rgba(14,14,24,0.88); backdrop-filter: blur(20px);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>-webkit-backdrop-filter: blur(20px);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border-top: 1px solid rgba(255,255,255,0.08);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 10px 0; padding-bottom: calc(10px + var(--safe-bottom));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tab-btn {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>flex: 1; display: flex; flex-direction: column;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>align-items: center; gap: 3px; cursor: pointer;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border: none; background: none; color: #8E8E9A;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-family: var(--font); padding: 4px 0; transition: all .15s;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tab-btn:active { transform: scale(0.9); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tab-icon { font-size: 22px; line-height: 1; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tab-label { font-size: 10px; font-weight: 600; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tab-btn.active .tab-label { color: var(--blue); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tab-btn.active .tab-icon { filter: drop-shadow(0 0 6px rgba(59,127,232,0.6)); }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Toast ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#toast {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 12px 24px; border-radius: 22px; font-size: 14px; font-weight: 700;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>z-index: 200; display: none; white-space: nowrap;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>box-shadow: 0 8px 30px rgba(0,0,0,0.3); font-family: var(--font);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>animation: toastIn 0.3s ease;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#toast.show { display: block; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#toast.ok<span class="Apple-converted-space">  </span>{ background: rgba(76,175,80,0.92); color: #fff; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#toast.err { background: rgba(232,83,83,0.92); color: #fff; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Animationen ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>@keyframes blob {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>0%,100% { transform: translate(0,0) scale(1); }</p>
+<p class="p1"><span class="Apple-converted-space">      </span>33% { transform: translate(18px,-14px) scale(1.05); }</p>
+<p class="p1"><span class="Apple-converted-space">      </span>66% { transform: translate(-10px,10px) scale(0.97); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>@keyframes pulseDot {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>0%,100% { opacity:1; transform:scale(1); }</p>
+<p class="p1"><span class="Apple-converted-space">      </span>50% { opacity:0.4; transform:scale(1.5); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>@keyframes toastIn {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>from { opacity:0; transform:translateX(-50%) translateY(16px); }</p>
+<p class="p1"><span class="Apple-converted-space">      </span>to <span class="Apple-converted-space">  </span>{ opacity:1; transform:translateX(-50%) translateY(0); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>/* ── Views ── */</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.view { display: none; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.view.active { display: block; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.spacer { height: 90px; }</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;!-- SheetJS für Excel-Export --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"&gt;&lt;/script&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;!-- Hintergrund --&gt;</p>
+<p class="p1">&lt;div id="bg"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="blob blob1"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="blob blob2"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="blob blob3"&gt;&lt;/div&gt;</p>
+<p class="p1">&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;!-- App --&gt;</p>
+<p class="p1">&lt;div id="app"&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;!-- Status Bar --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div id="status-bar"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;span id="clock"&gt;--:--&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div style="display:flex;gap:6px;font-size:11px;"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;span&gt;●●●●&lt;/span&gt;&lt;span&gt;WiFi&lt;/span&gt;&lt;span&gt;🔋&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;!-- Header --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div id="header"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div id="header-sub"&gt;Datum wird geladen…&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div id="header-title"&gt;Zeiterfassung&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="avatar-btn"&gt;👤&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;!-- Scroll --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div id="scroll"&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;!-- ═══ VIEW: HEUTE ═══ --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="view active" id="view-today"&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;!-- Timer-Card --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card" id="timer-card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="pulse-dot" id="pulse-dot" style="display:none"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="timer-label" id="timer-label"&gt;Bereit&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="timer-big" id="timer-big"&gt;0:00&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="timer-sub" id="timer-sub"&gt;Noch nicht gestempelt&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;!-- Chips (nur vor Start) --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="chips" id="chips-row"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="chip" onclick="togglePicker('pause')"&gt;☕ &lt;span id="chip-pause"&gt;30 Min&lt;/span&gt;&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="chip" onclick="togglePicker('project')"&gt;📁 &lt;span id="chip-project"&gt;Büro&lt;/span&gt;&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;!-- Pause Picker --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="picker" id="picker-pause" style="display:none"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="picker-title"&gt;Pause wählen&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="picker-row" id="pause-opts"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;!-- Projekt Picker --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="picker" id="picker-project" style="display:none"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="picker-title"&gt;Projekt wählen&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="picker-row" id="project-opts"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;!-- Notiz --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;input class="note-input" id="note-input" placeholder="Notiz (optional)…" /&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;!-- Haupt-Button --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;button class="btn-main btn-start" id="main-btn" onclick="handleMainBtn()"&gt;▶<span class="Apple-converted-space">  </span>Starten&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;!-- Manuelle Eingabe --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card" id="manual-card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="sec-title"&gt;✏️ Manuell erfassen&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div id="manual-collapsed"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="btn-sec" style="width:100%" onclick="openManual()"&gt;+ Zeit manuell eintragen&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div id="manual-expanded" style="display:none"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="man-row"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="man-field"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div class="man-label"&gt;Start&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;input type="time" class="time-input" id="man-start" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="man-arrow"&gt;→&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="man-field"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;div class="man-label"&gt;Ende&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>&lt;input type="time" class="time-input" id="man-end" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="chips"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button class="chip" onclick="togglePicker('man-pause')"&gt;☕ &lt;span id="man-chip-pause"&gt;30 Min&lt;/span&gt;&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button class="chip" onclick="togglePicker('man-project')"&gt;📁 &lt;span id="man-chip-project"&gt;Büro&lt;/span&gt;&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="picker" id="picker-man-pause" style="display:none"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="picker-title"&gt;Pause wählen&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="picker-row" id="man-pause-opts"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="picker" id="picker-man-project" style="display:none"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="picker-title"&gt;Projekt wählen&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="picker-row" id="man-project-opts"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;input class="note-input" id="man-note" placeholder="Notiz…" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="btn-row"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button class="btn-sec" onclick="closeManual()"&gt;Abbrechen&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button class="btn-sec btn-blue" style="flex:2" onclick="saveManual()"&gt;💾 Speichern&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;!-- Zusammenfassung --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card" id="summary-card" style="display:none"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="sec-title"&gt;📋 Heute im Überblick&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="summary-grid" id="summary-grid"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div id="summary-note"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="spacer"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;!-- ═══ VIEW: VERLAUF ═══ --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="view" id="view-history"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="sec-title"&gt;🗓 Alle Einträge&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div id="history-list"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="spacer"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;!-- ═══ VIEW: STATISTIK ═══ --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="view" id="view-stats"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="kpi-grid" id="kpi-grid"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="sec-title"&gt;📊 Letzte 7 Tage&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="bar-chart" id="bar-chart"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="sec-title"&gt;📁 Nach Projekt&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div id="proj-breakdown"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="sec-title"&gt;📤 Export&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:14px;line-height:1.6"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>Alle Einträge als Excel-Datei exportieren.&lt;br&gt;Datei dann in iCloud, per Mail oder AirDrop speichern.</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;button class="btn-main btn-start" onclick="exportExcel()" id="export-btn"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>📊<span class="Apple-converted-space">  </span>Als Excel exportieren</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div id="export-hint" style="display:none;margin-top:12px;font-size:12px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>Datei wurde erstellt! Tippe auf "Öffnen" → Teilen ↑ → "In Dateien sichern" → iCloud Drive</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="spacer"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;&lt;!-- /scroll --&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;!-- Tab Bar --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div id="tab-bar"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button class="tab-btn active" onclick="setTab('today')" id="tab-today"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;span class="tab-icon"&gt;⏱&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;span class="tab-label"&gt;Heute&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button class="tab-btn" onclick="setTab('history')" id="tab-history"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;span class="tab-icon"&gt;📋&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;span class="tab-label"&gt;Verlauf&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button class="tab-btn" onclick="setTab('stats')" id="tab-stats"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;span class="tab-icon"&gt;📊&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;span class="tab-label"&gt;Statistik&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;/div&gt;&lt;!-- /app --&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;!-- Toast --&gt;</p>
+<p class="p1">&lt;div id="toast"&gt;&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;script&gt;</p>
+<p class="p1">// ── Konstanten ─────────────────────────────────────────────────</p>
+<p class="p1">const PROJECTS <span class="Apple-converted-space">  </span>= ["Büro","Homeoffice","Baustelle","Meeting","Sonstiges"];</p>
+<p class="p1">const PAUSE_OPTS = [0,15,30,45,60];</p>
+<p class="p1">const DAYS <span class="Apple-converted-space">  </span>= ["So","Mo","Di","Mi","Do","Fr","Sa"];</p>
+<p class="p1">const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];</p>
+<p class="p1">const MONTHS_S = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];</p>
+<p class="p2"><br></p>
+<p class="p1">// ── State ──────────────────────────────────────────────────────</p>
+<p class="p1">let state = {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>running: false,</p>
+<p class="p1"><span class="Apple-converted-space">  </span>startTime: null,</p>
+<p class="p1"><span class="Apple-converted-space">  </span>pauseMin: 30,</p>
+<p class="p1"><span class="Apple-converted-space">  </span>project: "Büro",</p>
+<p class="p1"><span class="Apple-converted-space">  </span>note: "",</p>
+<p class="p1"><span class="Apple-converted-space">  </span>timerInterval: null,</p>
+<p class="p1"><span class="Apple-converted-space">  </span>elapsed: 0,</p>
+<p class="p1"><span class="Apple-converted-space">  </span>dayData: null,</p>
+<p class="p1"><span class="Apple-converted-space">  </span>manPauseMin: 30,</p>
+<p class="p1"><span class="Apple-converted-space">  </span>manProject: "Büro",</p>
+<p class="p1">};</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Helpers ────────────────────────────────────────────────────</p>
+<p class="p1">function pad(n){ return String(n).padStart(2,"0"); }</p>
+<p class="p1">function todayKey(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const d=new Date();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;</p>
+<p class="p1">}</p>
+<p class="p1">function fmtTime(iso){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!iso) return "--:--";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const d=new Date(iso);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return `${pad(d.getHours())}:${pad(d.getMinutes())}`;</p>
+<p class="p1">}</p>
+<p class="p1">function fmtDur(ms){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!ms||ms&lt;0) return "0:00";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const m=Math.floor(ms/60000);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return `${Math.floor(m/60)}:${pad(m%60)}`;</p>
+<p class="p1">}</p>
+<p class="p1">function fmtDurH(ms){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!ms||ms&lt;=0) return "–";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return h&gt;0?`${h}h ${m}m`:`${m}m`;</p>
+<p class="p1">}</p>
+<p class="p1">function dateLabel(key){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [y,m,d]=key.split("-");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const dt=new Date(+y,+m-1,+d);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return `${DAYS[dt.getDay()]}, ${+d}. ${MONTHS_S[+m-1]} ${y}`;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Storage (localStorage als Fallback) ───────────────────────</p>
+<p class="p1">function lsGet(key){ try{ return JSON.parse(localStorage.getItem(key)); }catch{ return null; } }</p>
+<p class="p1">function lsSet(key,val){ try{ localStorage.setItem(key,JSON.stringify(val)); }catch{} }</p>
+<p class="p1">function lsDel(key){ try{ localStorage.removeItem(key); }catch{} }</p>
+<p class="p1">function lsKeys(prefix){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const keys=[];</p>
+<p class="p1"><span class="Apple-converted-space">  </span>for(let i=0;i&lt;localStorage.length;i++){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const k=localStorage.key(i);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(k&amp;&amp;k.startsWith(prefix)) keys.push(k.slice(prefix.length));</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return keys.sort().reverse();</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function saveDay(key,data){ lsSet(`zt:${key}`,data); }</p>
+<p class="p1">function loadDay(key){ return lsGet(`zt:${key}`); }</p>
+<p class="p1">function deleteDay(key){ lsDel(`zt:${key}`); }</p>
+<p class="p1">function allDayKeys(){ return lsKeys("zt:"); }</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Toast ──────────────────────────────────────────────────────</p>
+<p class="p1">let toastTimer=null;</p>
+<p class="p1">function showToast(msg, type="ok"){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const el=document.getElementById("toast");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>el.textContent=msg; el.className=`show ${type}`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(toastTimer) clearTimeout(toastTimer);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>toastTimer=setTimeout(()=&gt;{ el.className=""; },2600);</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Uhr &amp; Datum ────────────────────────────────────────────────</p>
+<p class="p1">function updateClock(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const now=new Date();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("clock").textContent=</p>
+<p class="p1"><span class="Apple-converted-space">    </span>`${pad(now.getHours())}:${pad(now.getMinutes())}`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("header-sub").textContent=</p>
+<p class="p1"><span class="Apple-converted-space">    </span>`${DAYS[now.getDay()]}, ${now.getDate()}. ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;</p>
+<p class="p1">}</p>
+<p class="p1">setInterval(updateClock,1000); updateClock();</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Tabs ───────────────────────────────────────────────────────</p>
+<p class="p1">function setTab(tab){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>["today","history","stats"].forEach(t=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById(`view-${t}`).classList.toggle("active",t===tab);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById(`tab-${t}`).classList.toggle("active",t===tab);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(tab==="history") renderHistory();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(tab==="stats") <span class="Apple-converted-space">  </span>renderStats();</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Picker aufbauen ────────────────────────────────────────────</p>
+<p class="p1">function buildPickers(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Pause (Stempeluhr)</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const po=document.getElementById("pause-opts");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>PAUSE_OPTS.forEach(p=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const b=document.createElement("button");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.className="picker-opt"+(state.pauseMin===p?" active":"");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.textContent=p===0?"Keine":`${p} Min`;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.onclick=()=&gt;{ state.pauseMin=p; updatePauseChips(); closePicker("pause"); };</p>
+<p class="p1"><span class="Apple-converted-space">    </span>po.appendChild(b);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Projekt (Stempeluhr)</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const prj=document.getElementById("project-opts");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>PROJECTS.forEach(p=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const b=document.createElement("button");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.className="picker-opt"+(state.project===p?" active":"");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.textContent=p;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.onclick=()=&gt;{ state.project=p; updateProjectChips(); closePicker("project"); };</p>
+<p class="p1"><span class="Apple-converted-space">    </span>prj.appendChild(b);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Manuelle Pause</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const mpo=document.getElementById("man-pause-opts");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>PAUSE_OPTS.forEach(p=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const b=document.createElement("button");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.className="picker-opt"+(state.manPauseMin===p?" active":"");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.textContent=p===0?"Keine":`${p} Min`;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.onclick=()=&gt;{ state.manPauseMin=p; updateManChips(); closePicker("man-pause"); };</p>
+<p class="p1"><span class="Apple-converted-space">    </span>mpo.appendChild(b);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Manuelles Projekt</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const mprj=document.getElementById("man-project-opts");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>PROJECTS.forEach(p=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const b=document.createElement("button");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.className="picker-opt"+(state.manProject===p?" active":"");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.textContent=p;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.onclick=()=&gt;{ state.manProject=p; updateManChips(); closePicker("man-project"); };</p>
+<p class="p1"><span class="Apple-converted-space">    </span>mprj.appendChild(b);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function updatePauseChips(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("chip-pause").textContent=state.pauseMin===0?"Keine Pause":`${state.pauseMin} Min`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.querySelectorAll("#pause-opts .picker-opt").forEach((b,i)=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.classList.toggle("active",PAUSE_OPTS[i]===state.pauseMin);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1">}</p>
+<p class="p1">function updateProjectChips(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("chip-project").textContent=state.project;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.querySelectorAll("#project-opts .picker-opt").forEach((b,i)=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.classList.toggle("active",PROJECTS[i]===state.project);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1">}</p>
+<p class="p1">function updateManChips(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("man-chip-pause").textContent=state.manPauseMin===0?"Keine Pause":`${state.manPauseMin} Min`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("man-chip-project").textContent=state.manProject;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.querySelectorAll("#man-pause-opts .picker-opt").forEach((b,i)=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.classList.toggle("active",PAUSE_OPTS[i]===state.manPauseMin);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.querySelectorAll("#man-project-opts .picker-opt").forEach((b,i)=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.classList.toggle("active",PROJECTS[i]===state.manProject);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function togglePicker(id){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const el=document.getElementById(`picker-${id}`);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const shown=el.style.display!=="none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// alle schließen</p>
+<p class="p1"><span class="Apple-converted-space">  </span>["pause","project","man-pause","man-project"].forEach(p=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const e=document.getElementById(`picker-${p}`);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(e) e.style.display="none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!shown) el.style.display="block";</p>
+<p class="p1">}</p>
+<p class="p1">function closePicker(id){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const el=document.getElementById(`picker-${id}`);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(el) el.style.display="none";</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Timer-Logik ────────────────────────────────────────────────</p>
+<p class="p1">function startTimer(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(state.timerInterval) clearInterval(state.timerInterval);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.timerInterval=setInterval(()=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>state.elapsed=Date.now()-new Date(state.startTime).getTime();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>updateTimerUI();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>},1000);</p>
+<p class="p1">}</p>
+<p class="p1">function stopTimer(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>clearInterval(state.timerInterval);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.timerInterval=null;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function updateTimerUI(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const net=state.elapsed-state.pauseMin*60000;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("timer-big").textContent=fmtDur(Math.max(net,0));</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Start / Stop ───────────────────────────────────────────────</p>
+<p class="p1">function handleMainBtn(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!state.running &amp;&amp; !state.dayData?.endTime){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>handleStart();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>} else if(state.running){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>handleStop();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function handleStart(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const now=new Date().toISOString();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.running=true; state.startTime=now; state.elapsed=0;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.note=document.getElementById("note-input").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const data={running:true,startTime:now,endTime:null,</p>
+<p class="p1"><span class="Apple-converted-space">    </span>pauseMin:state.pauseMin,project:state.project,note:state.note,date:todayKey()};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.dayData=data;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>saveDay(todayKey(),data);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>startTimer();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>renderTodayUI();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>showToast("⏱ Stempeluhr gestartet");</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function handleStop(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const now=new Date().toISOString();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.running=false;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>stopTimer();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const net=state.elapsed-state.pauseMin*60000;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const data={running:false,startTime:state.startTime,endTime:now,</p>
+<p class="p1"><span class="Apple-converted-space">    </span>pauseMin:state.pauseMin,project:state.project,note:state.note,</p>
+<p class="p1"><span class="Apple-converted-space">    </span>date:todayKey(),elapsedMs:state.elapsed,netMs:Math.max(net,0)};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.dayData=data;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>saveDay(todayKey(),data);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>renderTodayUI();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>showToast("✅ Erfassung gespeichert");</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function handleReset(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.running=false; state.startTime=null; state.elapsed=0; state.dayData=null;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>stopTimer();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>deleteDay(todayKey());</p>
+<p class="p1"><span class="Apple-converted-space">  </span>renderTodayUI();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>showToast("🔄 Zurückgesetzt");</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Manuell ────────────────────────────────────────────────────</p>
+<p class="p1">function openManual(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("manual-collapsed").style.display="none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("manual-expanded").style.display="block";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Default: aktuelle Uhrzeit als Start</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const now=new Date();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const h=pad(now.getHours()), m=pad(now.getMinutes());</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("man-start").value=`${h}:${m}`;</p>
+<p class="p1">}</p>
+<p class="p1">function closeManual(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("manual-collapsed").style.display="block";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("manual-expanded").style.display="none";</p>
+<p class="p1">}</p>
+<p class="p1">function saveManual(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const s=document.getElementById("man-start").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const e=document.getElementById("man-end").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!s||!e){ showToast("Bitte Start und Ende eingeben","err"); return; }</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [sh,sm]=s.split(":").map(Number);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const [eh,em]=e.split(":").map(Number);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const today=new Date();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),sh,sm);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const end=new Date(today.getFullYear(),today.getMonth(),today.getDate(),eh,em);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(end&lt;=start){ showToast("Endzeit vor Startzeit!","err"); return; }</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const ms=end-start;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const net=Math.max(ms-state.manPauseMin*60000,0);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const note=document.getElementById("man-note").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const data={running:false,startTime:start.toISOString(),endTime:end.toISOString(),</p>
+<p class="p1"><span class="Apple-converted-space">    </span>pauseMin:state.manPauseMin,project:state.manProject,note,</p>
+<p class="p1"><span class="Apple-converted-space">    </span>date:todayKey(),elapsedMs:ms,netMs:net};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>state.dayData=data; state.pauseMin=state.manPauseMin; state.project=state.manProject;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>saveDay(todayKey(),data);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>closeManual();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>renderTodayUI();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>showToast("✅ Manuell gespeichert");</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Render Today ───────────────────────────────────────────────</p>
+<p class="p1">function renderTodayUI(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const d=state.dayData;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const done=d&amp;&amp;d.endTime;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const running=state.running;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Pulse</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("pulse-dot").style.display=running?"block":"none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("timer-card").classList.toggle("active-card",running);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Label</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("timer-label").textContent=</p>
+<p class="p1"><span class="Apple-converted-space">    </span>running?"Läuft gerade":done?"Abgeschlossen":"Bereit";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Timer</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(running){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const net=state.elapsed-state.pauseMin*60000;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("timer-big").textContent=fmtDur(Math.max(net,0));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("timer-sub").textContent=`Netto (abzgl. ${state.pauseMin} Min Pause)`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>} else if(d){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("timer-big").textContent=fmtDur(d.netMs||0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("timer-sub").textContent=</p>
+<p class="p1"><span class="Apple-converted-space">      </span>`${fmtTime(d.startTime)} – ${fmtTime(d.endTime)}`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("timer-big").textContent="0:00";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("timer-sub").textContent="Heute noch nicht gestempelt";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Chips + Picker + Note</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const showControls=!running&amp;&amp;!done;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("chips-row").style.display=showControls?"flex":"none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("picker-pause").style.display="none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("picker-project").style.display="none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("note-input").style.display=showControls?"block":"none";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Hauptbutton</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const btn=document.getElementById("main-btn");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(done){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.textContent="🔄<span class="Apple-converted-space">  </span>Neu starten";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.className="btn-main btn-start";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.onclick=handleReset;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>} else if(running){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.textContent="⏹<span class="Apple-converted-space">  </span>Stoppen";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.className="btn-main btn-stop";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.onclick=handleStop;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.textContent="▶<span class="Apple-converted-space">  </span>Starten";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.className="btn-main btn-start";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>btn.onclick=handleStart;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Manuelle Karte</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("manual-card").style.display=running?"none":"block";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(!running) closeManual();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Zusammenfassung</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const sc=document.getElementById("summary-card");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(d){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>sc.style.display="block";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const items=[</p>
+<p class="p1"><span class="Apple-converted-space">      </span>["Start", fmtTime(d.startTime)],</p>
+<p class="p1"><span class="Apple-converted-space">      </span>["Ende",<span class="Apple-converted-space">  </span>fmtTime(d.endTime)],</p>
+<p class="p1"><span class="Apple-converted-space">      </span>["Brutto",fmtDurH(d.elapsedMs||state.elapsed)],</p>
+<p class="p1"><span class="Apple-converted-space">      </span>["Pause", d.pauseMin&gt;0?`${d.pauseMin} Min`:"Keine"],</p>
+<p class="p1"><span class="Apple-converted-space">      </span>["Netto", fmtDurH(d.netMs)],</p>
+<p class="p1"><span class="Apple-converted-space">      </span>["Projekt",d.project||"–"],</p>
+<p class="p1"><span class="Apple-converted-space">    </span>];</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("summary-grid").innerHTML=</p>
+<p class="p1"><span class="Apple-converted-space">      </span>items.map(([k,v])=&gt;`</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="summary-item"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="summary-key"&gt;${k}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="summary-val"&gt;${v||"–"}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;`).join("");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("summary-note").innerHTML=</p>
+<p class="p1"><span class="Apple-converted-space">      </span>d.note?`&lt;div class="note-display"&gt;💬 ${d.note}&lt;/div&gt;`:"";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>sc.style.display="none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Render History ─────────────────────────────────────────────</p>
+<p class="p1">function renderHistory(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const keys=allDayKeys().filter(k=&gt;k!==todayKey());</p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Auch heute anzeigen wenn gespeichert</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const todayData=loadDay(todayKey());</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const allKeys=[...(todayData?[todayKey()]:[]),...keys];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const el=document.getElementById("history-list");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(allKeys.length===0){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>el.innerHTML=`&lt;div class="empty-state"&gt;Noch keine Einträge&lt;/div&gt;`; return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>el.innerHTML=allKeys.map(key=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const data=loadDay(key);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(!data) return "";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return `</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="hist-row"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="hist-date"&gt;${dateLabel(key)}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="hist-meta"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>${fmtTime(data.startTime)} – ${fmtTime(data.endTime)}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>${data.pauseMin&gt;0?` · ☕ ${data.pauseMin}m`:""}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>${data.project?` · 📁 ${data.project}`:""}</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>${data.note?`&lt;div class="hist-note"&gt;💬 ${data.note}&lt;/div&gt;`:""}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="hist-right"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="hist-dur"&gt;${fmtDurH(data.netMs)}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="del-btn" onclick="deleteDayUI('${key}')"&gt;✕&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}).join("");</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function deleteDayUI(key){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>deleteDay(key);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(key===todayKey()){ state.dayData=null; state.running=false; stopTimer(); renderTodayUI(); }</p>
+<p class="p1"><span class="Apple-converted-space">  </span>renderHistory();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>showToast("Eintrag gelöscht");</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Render Stats ───────────────────────────────────────────────</p>
+<p class="p1">function renderStats(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const keys=allDayKeys();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const all=keys.map(k=&gt;({key:k,data:loadDay(k)})).filter(h=&gt;h.data?.netMs);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const now=new Date();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const todayData=loadDay(todayKey());</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Diese Woche</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const weekStart=new Date(now); weekStart.setDate(now.getDate()-now.getDay()+1);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const weekMs=all.filter(h=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const d=new Date(h.key); return d&gt;=weekStart&amp;&amp;d&lt;=now;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}).reduce((s,h)=&gt;s+h.data.netMs,0);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const weekDays=all.filter(h=&gt;{const d=new Date(h.key);return d&gt;=weekStart&amp;&amp;d&lt;=now;}).length;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Ø Tag</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const avgMs=all.length?all.reduce((s,h)=&gt;s+h.data.netMs,0)/all.length:0;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Dieser Monat</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const monthKey=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const monthAll=all.filter(h=&gt;h.key.startsWith(monthKey));</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const monthMs=monthAll.reduce((s,h)=&gt;s+h.data.netMs,0);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// KPIs</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("kpi-grid").innerHTML=[</p>
+<p class="p1"><span class="Apple-converted-space">    </span>{icon:"📅",label:"Diese Woche",val:fmtDurH(weekMs),sub:`${weekDays} Tage`},</p>
+<p class="p1"><span class="Apple-converted-space">    </span>{icon:"📆",label:"Ø / Tag",<span class="Apple-converted-space">    </span>val:fmtDurH(avgMs), sub:`${all.length} Tage ges.`},</p>
+<p class="p1"><span class="Apple-converted-space">    </span>{icon:"🗓",label:"Dieser Monat",val:fmtDurH(monthMs),sub:`${monthAll.length} Tage`},</p>
+<p class="p1"><span class="Apple-converted-space">  </span>].map(({icon,label,val,sub})=&gt;`</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="kpi-card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="kpi-icon"&gt;${icon}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="kpi-val"&gt;${val}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="kpi-label"&gt;${label}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="kpi-sub"&gt;${sub}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;`).join("");</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Balkendiagramm letzte 7 Tage</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const maxMs=9*3600000;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const bars=Array.from({length:7},(_,i)=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const d=new Date(now); d.setDate(now.getDate()-(6-i));</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const key=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const entry=all.find(h=&gt;h.key===key)||(key===todayKey()&amp;&amp;todayData?{data:todayData}:null);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const ms=entry?.data?.netMs||0;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const pct=Math.min(ms/maxMs*100,100);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return `</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="bar-col"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="bar-track"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div class="bar-fill" style="height:${pct}%"&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="bar-day"&gt;${DAYS[d.getDay()]}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>${ms&gt;0?`&lt;div class="bar-val"&gt;${fmtDurH(ms)}&lt;/div&gt;`:""}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("bar-chart").innerHTML=bars.join("");</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Projekte</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const projEl=document.getElementById("proj-breakdown");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const totalMs=all.reduce((s,h)=&gt;s+h.data.netMs,0);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(totalMs===0){ projEl.innerHTML=`&lt;div class="empty-state"&gt;Noch keine Daten&lt;/div&gt;`; return; }</p>
+<p class="p1"><span class="Apple-converted-space">  </span>projEl.innerHTML=PROJECTS.map(proj=&gt;{</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const ms=all.filter(h=&gt;h.data.project===proj).reduce((s,h)=&gt;s+h.data.netMs,0);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const pct=Math.round(ms/totalMs*100);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(pct===0) return "";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return `</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="proj-row"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="proj-name"&gt;${proj}&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="proj-bar"&gt;&lt;div class="proj-fill" style="width:${pct}%"&gt;&lt;/div&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="proj-pct"&gt;${pct}%&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}).join("");</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">// ── Init ───────────────────────────────────────────────────────</p>
+<p class="p1">(function init(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>buildPickers();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>// Gespeicherten Zustand laden</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const today=loadDay(todayKey());</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if(today){</p>
+<p class="p1"><span class="Apple-converted-space">    </span>state.dayData=today;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>state.pauseMin=today.pauseMin??30;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>state.project=today.project??"Büro";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>state.note=today.note??"";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("note-input").value=state.note;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>if(today.running&amp;&amp;today.startTime){</p>
+<p class="p1"><span class="Apple-converted-space">      </span>state.running=true;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>state.startTime=today.startTime;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>state.elapsed=Date.now()-new Date(today.startTime).getTime();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>startTimer();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>updatePauseChips(); updateProjectChips();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>renderTodayUI();</p>
+<p class="p1">})();</p>
+<p class="p2"><br></p>
+<p class="p2"><br></p>
+<p class="p1">// ── Excel Export ───────────────────────────────────────────────</p>
+<p class="p1">function exportExcel(){</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const btn = document.getElementById('export-btn');</p>
+<p class="p1"><span class="Apple-converted-space">  </span>btn.textContent = '⏳<span class="Apple-converted-space">  </span>Wird erstellt…';</p>
+<p class="p1"><span class="Apple-converted-space">  </span>btn.disabled = true;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>setTimeout(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const keys = allDayKeys();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const allEntries = keys.map(k =&gt; ({ key: k, data: loadDay(k) })).filter(h =&gt; h.data);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>// ── Blatt 1: Alle Einträge ──</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const detailRows = [</p>
+<p class="p1"><span class="Apple-converted-space">        </span>['Datum', 'Wochentag', 'Start', 'Ende', 'Brutto (h)', 'Pause (Min)', 'Netto (h)', 'Projekt', 'Notiz']</p>
+<p class="p1"><span class="Apple-converted-space">      </span>];</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allEntries.forEach(({ key, data }) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (!data.startTime) return;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const [y, m, d] = key.split('-');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const dt = new Date(+y, +m - 1, +d);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const brutto = data.elapsedMs ? +(data.elapsedMs / 3600000).toFixed(2) : 0;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const netto<span class="Apple-converted-space">  </span>= data.netMs <span class="Apple-converted-space">    </span>? +(data.netMs <span class="Apple-converted-space">    </span>/ 3600000).toFixed(2) : 0;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>detailRows.push([</p>
+<p class="p1"><span class="Apple-converted-space">          </span>,</p>
+<p class="p1"><span class="Apple-converted-space">          </span>DAYS[dt.getDay()],</p>
+<p class="p1"><span class="Apple-converted-space">          </span>fmtTime(data.startTime),</p>
+<p class="p1"><span class="Apple-converted-space">          </span>fmtTime(data.endTime),</p>
+<p class="p1"><span class="Apple-converted-space">          </span>brutto,</p>
+<p class="p1"><span class="Apple-converted-space">          </span>data.pauseMin || 0,</p>
+<p class="p1"><span class="Apple-converted-space">          </span>netto,</p>
+<p class="p1"><span class="Apple-converted-space">          </span>data.project || '–',</p>
+<p class="p1"><span class="Apple-converted-space">          </span>data.note<span class="Apple-converted-space">    </span>|| ''</p>
+<p class="p1"><span class="Apple-converted-space">        </span>]);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>});</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>// ── Blatt 2: Monatsübersicht ──</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const monthMap = {};</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allEntries.forEach(({ key, data }) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (!data.netMs) return;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const monthKey = key.slice(0, 7);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (!monthMap[monthKey]) monthMap[monthKey] = { tage: 0, nettoMs: 0 };</p>
+<p class="p1"><span class="Apple-converted-space">        </span>monthMap[monthKey].tage++;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>monthMap[monthKey].nettoMs += data.netMs;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const monthRows = [['Monat', 'Arbeitstage', 'Netto gesamt (h)', 'Ø pro Tag (h)']];</p>
+<p class="p1"><span class="Apple-converted-space">      </span>Object.entries(monthMap).sort().forEach(([mk, v]) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const [y, m] = mk.split('-');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const gesamt = +(v.nettoMs / 3600000).toFixed(2);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const avg<span class="Apple-converted-space">    </span>= +(gesamt / v.tage).toFixed(2);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>monthRows.push([, v.tage, gesamt, avg]);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>});</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>// ── Blatt 3: Projekt-Auswertung ──</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const projMap = {};</p>
+<p class="p1"><span class="Apple-converted-space">      </span>allEntries.forEach(({ data }) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (!data.netMs) return;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const p = data.project || 'Sonstiges';</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (!projMap[p]) projMap[p] = { tage: 0, ms: 0 };</p>
+<p class="p1"><span class="Apple-converted-space">        </span>projMap[p].tage++;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>projMap[p].ms += data.netMs;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const totalMs = Object.values(projMap).reduce((s, v) =&gt; s + v.ms, 0);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const projRows = [['Projekt', 'Arbeitstage', 'Netto gesamt (h)', 'Anteil (%)']];</p>
+<p class="p1"><span class="Apple-converted-space">      </span>Object.entries(projMap).sort((a,b) =&gt; b[1].ms - a[1].ms).forEach(([p, v]) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>projRows.push([</p>
+<p class="p1"><span class="Apple-converted-space">          </span>p,</p>
+<p class="p1"><span class="Apple-converted-space">          </span>v.tage,</p>
+<p class="p1"><span class="Apple-converted-space">          </span>+(v.ms / 3600000).toFixed(2),</p>
+<p class="p1"><span class="Apple-converted-space">          </span>totalMs &gt; 0 ? Math.round(v.ms / totalMs * 100) : 0</p>
+<p class="p1"><span class="Apple-converted-space">        </span>]);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>});</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>// ── Workbook erstellen ──</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const wb = XLSX.utils.book_new();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>const ws1 = XLSX.utils.aoa_to_sheet(detailRows);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>ws1['!cols'] = [14,12,8,8,11,12,10,14,20].map(w =&gt; ({ wch: w }));</p>
+<p class="p1"><span class="Apple-converted-space">      </span>// Header-Zeile fett (soweit SheetJS das unterstützt)</p>
+<p class="p1"><span class="Apple-converted-space">      </span>XLSX.utils.book_append_sheet(wb, ws1, 'Alle Einträge');</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>const ws2 = XLSX.utils.aoa_to_sheet(monthRows);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>ws2['!cols'] = [12,13,18,14].map(w =&gt; ({ wch: w }));</p>
+<p class="p1"><span class="Apple-converted-space">      </span>XLSX.utils.book_append_sheet(wb, ws2, 'Monatsübersicht');</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>const ws3 = XLSX.utils.aoa_to_sheet(projRows);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>ws3['!cols'] = [16,13,18,12].map(w =&gt; ({ wch: w }));</p>
+<p class="p1"><span class="Apple-converted-space">      </span>XLSX.utils.book_append_sheet(wb, ws3, 'Nach Projekt');</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>// Dateiname mit Datum</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const now = new Date();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const fname = ;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>XLSX.writeFile(wb, fname);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>btn.textContent = '✅<span class="Apple-converted-space">  </span>Export erfolgreich!';</p>
+<p class="p1"><span class="Apple-converted-space">      </span>document.getElementById('export-hint').style.display = 'block';</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setTimeout(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>btn.textContent = '📊<span class="Apple-converted-space">  </span>Als Excel exportieren';</p>
+<p class="p1"><span class="Apple-converted-space">        </span>btn.disabled = false;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}, 4000);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>} catch(e) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>btn.textContent = '❌<span class="Apple-converted-space">  </span>Fehler – bitte nochmal';</p>
+<p class="p1"><span class="Apple-converted-space">      </span>btn.disabled = false;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>console.error(e);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}, 100);</p>
+<p class="p1">}</p>
+<p class="p1">&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
 </body>
 </html>
