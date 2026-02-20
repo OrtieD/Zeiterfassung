@@ -311,6 +311,8 @@
     .view.active { display: block; }
     .spacer { height: 90px; }
   </style>
+  <!-- SheetJS für Excel-Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -446,6 +448,18 @@
       <div class="card">
         <div class="sec-title">📁 Nach Projekt</div>
         <div id="proj-breakdown"></div>
+      </div>
+      <div class="card">
+        <div class="sec-title">📤 Export</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:14px;line-height:1.6">
+          Alle Einträge als Excel-Datei exportieren.<br>Datei dann in iCloud, per Mail oder AirDrop speichern.
+        </div>
+        <button class="btn-main btn-start" onclick="exportExcel()" id="export-btn">
+          📊  Als Excel exportieren
+        </button>
+        <div id="export-hint" style="display:none;margin-top:12px;font-size:12px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6">
+          Datei wurde erstellt! Tippe auf "Öffnen" → Teilen ↑ → "In Dateien sichern" → iCloud Drive
+        </div>
       </div>
       <div class="spacer"></div>
     </div>
@@ -958,6 +972,115 @@ function renderStats(){
   }
   renderTodayUI();
 })();
+
+
+// ── Excel Export ───────────────────────────────────────────────
+function exportExcel(){
+  const btn = document.getElementById('export-btn');
+  btn.textContent = '⏳  Wird erstellt…';
+  btn.disabled = true;
+
+  setTimeout(() => {
+    try {
+      const keys = allDayKeys();
+      const allEntries = keys.map(k => ({ key: k, data: loadDay(k) })).filter(h => h.data);
+
+      // ── Blatt 1: Alle Einträge ──
+      const detailRows = [
+        ['Datum', 'Wochentag', 'Start', 'Ende', 'Brutto (h)', 'Pause (Min)', 'Netto (h)', 'Projekt', 'Notiz']
+      ];
+      allEntries.forEach(({ key, data }) => {
+        if (!data.startTime) return;
+        const [y, m, d] = key.split('-');
+        const dt = new Date(+y, +m - 1, +d);
+        const brutto = data.elapsedMs ? +(data.elapsedMs / 3600000).toFixed(2) : 0;
+        const netto  = data.netMs     ? +(data.netMs     / 3600000).toFixed(2) : 0;
+        detailRows.push([
+          ,
+          DAYS[dt.getDay()],
+          fmtTime(data.startTime),
+          fmtTime(data.endTime),
+          brutto,
+          data.pauseMin || 0,
+          netto,
+          data.project || '–',
+          data.note    || ''
+        ]);
+      });
+
+      // ── Blatt 2: Monatsübersicht ──
+      const monthMap = {};
+      allEntries.forEach(({ key, data }) => {
+        if (!data.netMs) return;
+        const monthKey = key.slice(0, 7);
+        if (!monthMap[monthKey]) monthMap[monthKey] = { tage: 0, nettoMs: 0 };
+        monthMap[monthKey].tage++;
+        monthMap[monthKey].nettoMs += data.netMs;
+      });
+      const monthRows = [['Monat', 'Arbeitstage', 'Netto gesamt (h)', 'Ø pro Tag (h)']];
+      Object.entries(monthMap).sort().forEach(([mk, v]) => {
+        const [y, m] = mk.split('-');
+        const gesamt = +(v.nettoMs / 3600000).toFixed(2);
+        const avg    = +(gesamt / v.tage).toFixed(2);
+        monthRows.push([, v.tage, gesamt, avg]);
+      });
+
+      // ── Blatt 3: Projekt-Auswertung ──
+      const projMap = {};
+      allEntries.forEach(({ data }) => {
+        if (!data.netMs) return;
+        const p = data.project || 'Sonstiges';
+        if (!projMap[p]) projMap[p] = { tage: 0, ms: 0 };
+        projMap[p].tage++;
+        projMap[p].ms += data.netMs;
+      });
+      const totalMs = Object.values(projMap).reduce((s, v) => s + v.ms, 0);
+      const projRows = [['Projekt', 'Arbeitstage', 'Netto gesamt (h)', 'Anteil (%)']];
+      Object.entries(projMap).sort((a,b) => b[1].ms - a[1].ms).forEach(([p, v]) => {
+        projRows.push([
+          p,
+          v.tage,
+          +(v.ms / 3600000).toFixed(2),
+          totalMs > 0 ? Math.round(v.ms / totalMs * 100) : 0
+        ]);
+      });
+
+      // ── Workbook erstellen ──
+      const wb = XLSX.utils.book_new();
+
+      const ws1 = XLSX.utils.aoa_to_sheet(detailRows);
+      ws1['!cols'] = [14,12,8,8,11,12,10,14,20].map(w => ({ wch: w }));
+      // Header-Zeile fett (soweit SheetJS das unterstützt)
+      XLSX.utils.book_append_sheet(wb, ws1, 'Alle Einträge');
+
+      const ws2 = XLSX.utils.aoa_to_sheet(monthRows);
+      ws2['!cols'] = [12,13,18,14].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws2, 'Monatsübersicht');
+
+      const ws3 = XLSX.utils.aoa_to_sheet(projRows);
+      ws3['!cols'] = [16,13,18,12].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws3, 'Nach Projekt');
+
+      // Dateiname mit Datum
+      const now = new Date();
+      const fname = ;
+
+      XLSX.writeFile(wb, fname);
+
+      btn.textContent = '✅  Export erfolgreich!';
+      document.getElementById('export-hint').style.display = 'block';
+      setTimeout(() => {
+        btn.textContent = '📊  Als Excel exportieren';
+        btn.disabled = false;
+      }, 4000);
+
+    } catch(e) {
+      btn.textContent = '❌  Fehler – bitte nochmal';
+      btn.disabled = false;
+      console.error(e);
+    }
+  }, 100);
+}
 </script>
 </body>
 </html>
